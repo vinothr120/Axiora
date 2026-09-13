@@ -51,27 +51,43 @@ router.get("/templates", (req, res) => {
   res.json({ templates: listTemplates() });
 });
 
-// `ids` omitted -> grant every currently-registered template (sensible default).
-// `ids` given as [] or with nothing valid in it -> reject, a code needs at least one.
-function resolveTemplateIds(ids) {
+// `raw` omitted -> grant every currently-registered template, row-editing off by
+// default (admin opts each one in explicitly). `raw` given as [] or with nothing
+// valid in it -> reject, a code needs at least one template.
+// Each entry may be a bare template id string (canManageRows defaults false) or
+// { id, canManageRows }.
+function resolveTemplates(raw) {
   const allIds = listTemplates().map((t) => t.id);
-  if (ids === undefined) return { ok: true, ids: allIds };
-  if (!Array.isArray(ids)) return { ok: false };
-  const valid = [...new Set(ids.filter((id) => allIds.includes(id)))];
-  if (valid.length === 0) return { ok: false };
-  return { ok: true, ids: valid };
+  if (raw === undefined) return { ok: true, templates: allIds.map((id) => ({ id, canManageRows: false })) };
+  if (!Array.isArray(raw)) return { ok: false };
+
+  const seen = new Set();
+  const templates = [];
+  for (const entry of raw) {
+    const id = typeof entry === "string" ? entry : entry?.id;
+    if (!allIds.includes(id) || seen.has(id)) continue;
+    seen.add(id);
+    const canManageRows = typeof entry === "object" && entry !== null ? Boolean(entry.canManageRows) : false;
+    templates.push({ id, canManageRows });
+  }
+  if (templates.length === 0) return { ok: false };
+  return { ok: true, templates };
 }
 
-async function grantTemplates(codeId, templateIds) {
-  for (const templateId of templateIds) {
-    await db.run("INSERT INTO code_templates (code_id, template_id) VALUES (?, ?)", [codeId, templateId]);
+async function grantTemplates(codeId, templates) {
+  for (const t of templates) {
+    await db.run("INSERT INTO code_templates (code_id, template_id, can_manage_rows) VALUES (?, ?, ?)", [
+      codeId,
+      t.id,
+      t.canManageRows ? 1 : 0,
+    ]);
   }
 }
 
 async function withComputedStatus(row) {
   const now = db.toSqlDateTime();
   const isExpired = row.status === "active" && row.expires_at && now > row.expires_at;
-  const grants = await db.all("SELECT template_id FROM code_templates WHERE code_id = ?", [row.id]);
+  const grants = await db.all("SELECT template_id, can_manage_rows FROM code_templates WHERE code_id = ?", [row.id]);
   return {
     id: row.id,
     code: row.code,
@@ -84,7 +100,7 @@ async function withComputedStatus(row) {
     expiresAt: row.expires_at,
     lastUsedAt: row.last_used_at,
     hasActiveSession: Boolean(row.active_session_token),
-    templateIds: grants.map((g) => g.template_id),
+    templates: grants.map((g) => ({ id: g.template_id, canManageRows: Boolean(g.can_manage_rows) })),
   };
 }
 
@@ -99,8 +115,8 @@ router.post("/codes", async (req, res) => {
   if (!Number.isInteger(durationDays) || durationDays <= 0) {
     return res.status(400).json({ error: "duration_days_required" });
   }
-  const templateIds = resolveTemplateIds(req.body?.templateIds);
-  if (!templateIds.ok) return res.status(400).json({ error: "at_least_one_template_required" });
+  const resolved = resolveTemplates(req.body?.templates);
+  if (!resolved.ok) return res.status(400).json({ error: "at_least_one_template_required" });
 
   const code = accessCode();
   const nowSql = db.toSqlDateTime();
@@ -108,7 +124,7 @@ router.post("/codes", async (req, res) => {
     "INSERT INTO access_codes (code, label, duration_days, status, created_at, created_by) VALUES (?, ?, ?, 'active', ?, ?)",
     [code, label, durationDays, nowSql, req.admin.id]
   );
-  await grantTemplates(insertId, templateIds.ids);
+  await grantTemplates(insertId, resolved.templates);
   const row = await db.get("SELECT * FROM access_codes WHERE id = ?", [insertId]);
   res.json({ code: await withComputedStatus(row) });
 });
@@ -123,8 +139,8 @@ router.post("/codes/bulk", async (req, res) => {
   if (!Number.isInteger(count) || count <= 0 || count > 500) {
     return res.status(400).json({ error: "count_must_be_1_to_500" });
   }
-  const templateIds = resolveTemplateIds(req.body?.templateIds);
-  if (!templateIds.ok) return res.status(400).json({ error: "at_least_one_template_required" });
+  const resolved = resolveTemplates(req.body?.templates);
+  if (!resolved.ok) return res.status(400).json({ error: "at_least_one_template_required" });
 
   const nowSql = db.toSqlDateTime();
   const generated = [];
@@ -134,7 +150,7 @@ router.post("/codes/bulk", async (req, res) => {
       "INSERT INTO access_codes (code, label, duration_days, status, created_at, created_by) VALUES (?, ?, ?, 'active', ?, ?)",
       [code, label, durationDays, nowSql, req.admin.id]
     );
-    await grantTemplates(insertId, templateIds.ids);
+    await grantTemplates(insertId, resolved.templates);
     generated.push(code);
   }
   res.json({ codes: generated });
@@ -155,12 +171,12 @@ router.post("/codes/:id/reactivate", async (req, res) => {
 
 router.post("/codes/:id/templates", async (req, res) => {
   const id = Number(req.params.id);
-  const templateIds = resolveTemplateIds(req.body?.templateIds);
-  if (!templateIds.ok) return res.status(400).json({ error: "at_least_one_template_required" });
+  const resolved = resolveTemplates(req.body?.templates);
+  if (!resolved.ok) return res.status(400).json({ error: "at_least_one_template_required" });
 
   await db.run("DELETE FROM code_templates WHERE code_id = ?", [id]);
-  await grantTemplates(id, templateIds.ids);
-  res.json({ ok: true, templateIds: templateIds.ids });
+  await grantTemplates(id, resolved.templates);
+  res.json({ ok: true, templates: resolved.templates });
 });
 
 module.exports = router;

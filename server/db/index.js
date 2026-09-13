@@ -68,6 +68,7 @@ const MYSQL_DDL = [
     id INT AUTO_INCREMENT PRIMARY KEY,
     code_id INT NOT NULL,
     template_id VARCHAR(64) NOT NULL,
+    can_manage_rows TINYINT(1) NOT NULL DEFAULT 0,
     UNIQUE KEY uniq_code_template (code_id, template_id),
     FOREIGN KEY (code_id) REFERENCES access_codes(id) ON DELETE CASCADE
   ) ENGINE=InnoDB`,
@@ -125,9 +126,15 @@ const SQLITE_DDL = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code_id INTEGER NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
     template_id TEXT NOT NULL,
+    can_manage_rows INTEGER NOT NULL DEFAULT 0,
     UNIQUE (code_id, template_id)
   )`,
 ];
+
+// Columns added after a table's first release — CREATE TABLE IF NOT EXISTS above
+// won't retroactively add them to a database that already has the table, so each
+// needs an explicit "add if missing" migration run once at boot.
+const COLUMN_MIGRATIONS = [{ table: "code_templates", column: "can_manage_rows", sqlType: "INTEGER NOT NULL DEFAULT 0" }];
 
 let impl;
 
@@ -144,6 +151,13 @@ function initMysql() {
 
   const ready = (async () => {
     for (const ddl of MYSQL_DDL) await pool.query(ddl);
+    for (const { table, column, sqlType } of COLUMN_MIGRATIONS) {
+      const [rows] = await pool.query(
+        "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+        [table, column]
+      );
+      if (rows.length === 0) await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqlType}`);
+    }
   })();
 
   return {
@@ -172,6 +186,10 @@ function initSqlite() {
   const db = new DatabaseSync(path.join(dataDir, "axiora.db"));
   db.exec("PRAGMA foreign_keys = ON");
   for (const ddl of SQLITE_DDL) db.exec(ddl);
+  for (const { table, column, sqlType } of COLUMN_MIGRATIONS) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqlType}`);
+  }
 
   return {
     ready: Promise.resolve(),

@@ -29,6 +29,7 @@ export default function Calculator() {
   const [statColumns, setStatColumns] = useState([]);
   const [inputFields, setInputFields] = useState(["open", "high", "low", "close"]);
   const [layout, setLayout] = useState("ladder");
+  const [canManageRows, setCanManageRows] = useState(false);
   const [rows, setRows] = useState(null);
   const [inputs, setInputs] = useState({});
   const [customMeta, setCustomMeta] = useState({});
@@ -51,13 +52,14 @@ export default function Calculator() {
     setStatus("loading");
     api
       .getTemplate(activeId)
-      .then(({ rows, groups, statColumns, inputFields, layout, customRows, hiddenKeys }) => {
+      .then(({ rows, groups, statColumns, inputFields, layout, canManageRows, customRows, hiddenKeys }) => {
         setRows(rows);
         setInputs(rowsToInputs(rows));
         setGroups(groups);
         setStatColumns(statColumns || []);
         setInputFields(inputFields && inputFields.length > 0 ? inputFields : ["open", "high", "low", "close"]);
         setLayout(layout || "ladder");
+        setCanManageRows(Boolean(canManageRows));
         setCustomMeta(customMetaFromRows(customRows));
         setHiddenKeys(new Set(hiddenKeys));
         setStatus("ready");
@@ -214,11 +216,11 @@ export default function Calculator() {
                 rows={rows}
                 inputs={inputs}
                 onChange={handleChange}
-                onDeleteRow={handleDeleteRow}
+                onDeleteRow={canManageRows ? handleDeleteRow : undefined}
                 statColumns={statColumns}
                 inputFields={inputFields}
               />
-              {groups.length > 0 && <AddRowForm groups={groups} inputFields={inputFields} onAdd={handleAddRow} />}
+              {canManageRows && groups.length > 0 && <AddRowForm groups={groups} inputFields={inputFields} onAdd={handleAddRow} />}
             </section>
 
             <section>

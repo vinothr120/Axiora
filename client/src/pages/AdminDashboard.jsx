@@ -36,10 +36,10 @@ const inputCls =
 
 function CodeTemplatesCell({ code, allTemplates, onSaved }) {
   const [editing, setEditing] = useState(false);
-  const [selected, setSelected] = useState(code.templateIds);
+  const [selected, setSelected] = useState(code.templates);
   const [saving, setSaving] = useState(false);
-  const names = allTemplates.filter((t) => code.templateIds.includes(t.id)).map((t) => t.name);
-  const isAll = allTemplates.length > 0 && code.templateIds.length === allTemplates.length;
+  const nameFor = (id) => allTemplates.find((t) => t.id === id)?.name || id;
+  const isAll = allTemplates.length > 0 && code.templates.length === allTemplates.length;
 
   async function save() {
     setSaving(true);
@@ -53,16 +53,19 @@ function CodeTemplatesCell({ code, allTemplates, onSaved }) {
   }
 
   if (!editing) {
+    const anyRowEdit = code.templates.some((t) => t.canManageRows);
+    const summary = code.templates.map((t) => `${nameFor(t.id)}${t.canManageRows ? " (rows)" : ""}`).join(", ");
+    const label = code.templates.length === 0 ? "None" : isAll && !anyRowEdit ? "All" : summary;
     return (
       <button
         onClick={() => {
-          setSelected(code.templateIds);
+          setSelected(code.templates);
           setEditing(true);
         }}
         className="text-left text-xs text-slate-600 hover:underline dark:text-slate-300"
         title="Click to edit"
       >
-        {isAll ? "All" : names.length > 0 ? names.join(", ") : "None"}
+        {label}
       </button>
     );
   }
@@ -117,9 +120,9 @@ export default function AdminDashboard() {
     refresh();
     api.adminListTemplates().then(({ templates }) => {
       setTemplates(templates);
-      const allIds = templates.map((t) => t.id);
-      setSingleTemplates(allIds);
-      setBulkTemplates(allIds);
+      const allGranted = templates.map((t) => ({ id: t.id, canManageRows: false }));
+      setSingleTemplates(allGranted);
+      setBulkTemplates(allGranted);
     });
   }, [refresh]);
 
