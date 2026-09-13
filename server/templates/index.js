@@ -6,8 +6,9 @@ const view = require("./90xl-view");
 const view5 = require("./90xl-view-5");
 const new2026 = require("./90xl-new-2026");
 const mcx2026 = require("./2026-new-method-mcx");
+const xl2020 = require("./2020-xl");
 
-const REGISTRY = [view3, view, view5, new2026, mcx2026];
+const REGISTRY = [view3, view, view5, new2026, mcx2026, xl2020];
 
 function listTemplates() {
   return REGISTRY.map((t) => ({ id: t.id, name: t.name }));
