@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { useAdminAuth } from "../core/AdminAuthContext";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
+import TemplateCheckboxes from "../components/TemplateCheckboxes";
 
 function StatusBadge({ status, isExpired }) {
   if (status === "revoked")
@@ -33,19 +34,75 @@ function Field({ label, children }) {
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white";
 
+function CodeTemplatesCell({ code, allTemplates, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState(code.templateIds);
+  const [saving, setSaving] = useState(false);
+  const names = allTemplates.filter((t) => code.templateIds.includes(t.id)).map((t) => t.name);
+  const isAll = allTemplates.length > 0 && code.templateIds.length === allTemplates.length;
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.setCodeTemplates(code.id, selected);
+      onSaved();
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => {
+          setSelected(code.templateIds);
+          setEditing(true);
+        }}
+        className="text-left text-xs text-slate-600 hover:underline dark:text-slate-300"
+        title="Click to edit"
+      >
+        {isAll ? "All" : names.length > 0 ? names.join(", ") : "None"}
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-56 space-y-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+      <TemplateCheckboxes templates={allTemplates} selected={selected} onChange={setSelected} />
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving || selected.length === 0}
+          className="rounded-md px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+          style={{ backgroundColor: "var(--role-accent)" }}
+        >
+          Save
+        </button>
+        <button onClick={() => setEditing(false)} className="rounded-md border border-slate-300 px-2 py-1 text-xs dark:border-slate-600">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { admin, logout } = useAdminAuth();
   const [codes, setCodes] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [filter, setFilter] = useState("all"); // all | active | expired | revoked
   const [loading, setLoading] = useState(true);
 
   const [singleLabel, setSingleLabel] = useState("");
   const [singleDays, setSingleDays] = useState(30);
+  const [singleTemplates, setSingleTemplates] = useState([]);
   const [singleResult, setSingleResult] = useState(null);
 
   const [bulkLabel, setBulkLabel] = useState("");
   const [bulkDays, setBulkDays] = useState(30);
   const [bulkCount, setBulkCount] = useState(10);
+  const [bulkTemplates, setBulkTemplates] = useState([]);
   const [bulkResult, setBulkResult] = useState(null);
 
   const refresh = useCallback(() => {
@@ -58,11 +115,17 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     refresh();
+    api.adminListTemplates().then(({ templates }) => {
+      setTemplates(templates);
+      const allIds = templates.map((t) => t.id);
+      setSingleTemplates(allIds);
+      setBulkTemplates(allIds);
+    });
   }, [refresh]);
 
   async function handleGenerateSingle(e) {
     e.preventDefault();
-    const { code } = await api.createCode(singleLabel || null, Number(singleDays));
+    const { code } = await api.createCode(singleLabel || null, Number(singleDays), singleTemplates);
     setSingleResult(code.code);
     setSingleLabel("");
     refresh();
@@ -70,7 +133,7 @@ export default function AdminDashboard() {
 
   async function handleGenerateBulk(e) {
     e.preventDefault();
-    const { codes } = await api.bulkCreateCodes(bulkLabel || null, Number(bulkDays), Number(bulkCount));
+    const { codes } = await api.bulkCreateCodes(bulkLabel || null, Number(bulkDays), Number(bulkCount), bulkTemplates);
     setBulkResult(codes);
     setBulkLabel("");
     refresh();
@@ -108,9 +171,11 @@ export default function AdminDashboard() {
               <Field label="Valid for (days)">
                 <input type="number" min="1" className={inputCls} value={singleDays} onChange={(e) => setSingleDays(e.target.value)} />
               </Field>
+              <TemplateCheckboxes templates={templates} selected={singleTemplates} onChange={setSingleTemplates} />
               <button
                 type="submit"
-                className="w-full rounded-lg py-2 text-sm font-semibold text-white"
+                disabled={singleTemplates.length === 0}
+                className="w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: "var(--role-accent)" }}
               >
                 Generate code
@@ -136,9 +201,11 @@ export default function AdminDashboard() {
               <Field label="Batch label (optional)">
                 <input className={inputCls} value={bulkLabel} onChange={(e) => setBulkLabel(e.target.value)} placeholder="e.g. Sept batch" />
               </Field>
+              <TemplateCheckboxes templates={templates} selected={bulkTemplates} onChange={setBulkTemplates} />
               <button
                 type="submit"
-                className="w-full rounded-lg py-2 text-sm font-semibold text-white"
+                disabled={bulkTemplates.length === 0}
+                className="w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: "var(--role-accent)" }}
               >
                 Generate codes
@@ -184,6 +251,7 @@ export default function AdminDashboard() {
                     <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Code</th>
                     <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Label</th>
                     <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Status</th>
+                    <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Templates</th>
                     <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Days</th>
                     <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Expires</th>
                     <th className="border-b border-slate-200 px-2 py-2 dark:border-slate-700">Last used</th>
@@ -198,6 +266,9 @@ export default function AdminDashboard() {
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.label || "–"}</td>
                       <td className="px-2 py-2">
                         <StatusBadge status={c.status} isExpired={c.isExpired} />
+                      </td>
+                      <td className="relative px-2 py-2">
+                        <CodeTemplatesCell code={c} allTemplates={templates} onSaved={refresh} />
                       </td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.durationDays}</td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.expiresAt ? c.expiresAt.slice(0, 10) : "not activated"}</td>
@@ -218,7 +289,7 @@ export default function AdminDashboard() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                      <td colSpan={9} className="py-8 text-center text-sm text-slate-400">
                         No codes in this filter.
                       </td>
                     </tr>

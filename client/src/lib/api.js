@@ -32,11 +32,14 @@ export const api = {
     request("/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   adminLogout: () => request("/admin/logout", { method: "POST" }),
   adminMe: () => request("/admin/me"),
+  adminListTemplates: () => request("/admin/templates"),
   listCodes: () => request("/admin/codes"),
-  createCode: (label, durationDays) =>
-    request("/admin/codes", { method: "POST", body: JSON.stringify({ label, durationDays }) }),
-  bulkCreateCodes: (label, durationDays, count) =>
-    request("/admin/codes/bulk", { method: "POST", body: JSON.stringify({ label, durationDays, count }) }),
+  createCode: (label, durationDays, templateIds) =>
+    request("/admin/codes", { method: "POST", body: JSON.stringify({ label, durationDays, templateIds }) }),
+  bulkCreateCodes: (label, durationDays, count, templateIds) =>
+    request("/admin/codes/bulk", { method: "POST", body: JSON.stringify({ label, durationDays, count, templateIds }) }),
   revokeCode: (id) => request(`/admin/codes/${id}/revoke`, { method: "POST" }),
   reactivateCode: (id) => request(`/admin/codes/${id}/reactivate`, { method: "POST" }),
+  setCodeTemplates: (id, templateIds) =>
+    request(`/admin/codes/${id}/templates`, { method: "POST", body: JSON.stringify({ templateIds }) }),
 };

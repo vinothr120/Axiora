@@ -87,13 +87,26 @@ async function persistOverrides(codeId, templateId, tpl, { edits, custom, hidden
   }
 }
 
-router.get("/", (req, res) => {
-  res.json({ templates: listTemplates() });
+async function hasAccess(codeId, templateId) {
+  const row = await db.get("SELECT 1 FROM code_templates WHERE code_id = ? AND template_id = ?", [codeId, templateId]);
+  return Boolean(row);
+}
+
+router.get("/", async (req, res) => {
+  const grants = await db.all("SELECT template_id FROM code_templates WHERE code_id = ?", [req.clientSession.code.id]);
+  const grantedIds = new Set(grants.map((g) => g.template_id));
+  res.json({ templates: listTemplates().filter((t) => grantedIds.has(t.id)) });
+});
+
+router.use("/:id", async (req, res, next) => {
+  const tpl = getTemplate(req.params.id);
+  if (!tpl) return res.status(404).json({ error: "not_found" });
+  if (!(await hasAccess(req.clientSession.code.id, tpl.id))) return res.status(403).json({ error: "template_not_granted" });
+  next();
 });
 
 router.get("/:id", async (req, res) => {
   const tpl = getTemplate(req.params.id);
-  if (!tpl) return res.status(404).json({ error: "not_found" });
 
   const overrides = await loadOverrides(req.clientSession.code.id, tpl.id);
   res.json({

@@ -64,6 +64,13 @@ const MYSQL_DDL = [
     UNIQUE KEY uniq_code_tpl_symbol (code_id, template_id, symbol_key),
     FOREIGN KEY (code_id) REFERENCES access_codes(id) ON DELETE CASCADE
   ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS code_templates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code_id INT NOT NULL,
+    template_id VARCHAR(64) NOT NULL,
+    UNIQUE KEY uniq_code_template (code_id, template_id),
+    FOREIGN KEY (code_id) REFERENCES access_codes(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB`,
 ];
 
 const SQLITE_DDL = [
@@ -113,6 +120,12 @@ const SQLITE_DDL = [
     sort_order INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     UNIQUE (code_id, template_id, symbol_key)
+  )`,
+  `CREATE TABLE IF NOT EXISTS code_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code_id INTEGER NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
+    template_id TEXT NOT NULL,
+    UNIQUE (code_id, template_id)
   )`,
 ];
 

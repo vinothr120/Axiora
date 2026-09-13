@@ -8,6 +8,7 @@ const db = require("./db");
 const authRoutes = require("./routes/auth");
 const calcRoutes = require("./routes/calc");
 const adminRoutes = require("./routes/admin");
+const { listTemplates } = require("./templates");
 
 const PORT = process.env.PORT || 4000;
 
@@ -32,9 +33,27 @@ async function bootstrapAdmin() {
   console.log(`[axiora] Bootstrapped admin account "${username}"`);
 }
 
+// Codes created before per-template grants existed (or any code somehow left with zero
+// grants) get access to every currently-registered template — safe, idempotent, never
+// touches a code an admin has deliberately narrowed down (which always has >=1 grant row).
+async function backfillTemplateGrants() {
+  const allIds = listTemplates().map((t) => t.id);
+  if (allIds.length === 0) return;
+  const ungranted = await db.all(
+    "SELECT id FROM access_codes WHERE id NOT IN (SELECT DISTINCT code_id FROM code_templates)"
+  );
+  for (const { id } of ungranted) {
+    for (const templateId of allIds) {
+      await db.run("INSERT INTO code_templates (code_id, template_id) VALUES (?, ?)", [id, templateId]);
+    }
+  }
+  if (ungranted.length > 0) console.log(`[axiora] Backfilled template grants for ${ungranted.length} code(s)`);
+}
+
 async function main() {
   await db.ready;
   await bootstrapAdmin();
+  await backfillTemplateGrants();
 
   const app = express();
   app.disable("x-powered-by");
