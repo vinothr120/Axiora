@@ -140,11 +140,20 @@ function calculate(input = {}) {
   });
 }
 
+const STAT_COLUMNS = [
+  { key: "hlcA", label: "HLC A" },
+  { key: "avg", label: "AVG" },
+  { key: "varHL", label: "H-L" },
+  { key: "todayOpen", label: "TODAY OPEN" },
+  { key: "lowClose", label: "L-C" },
+];
+
 module.exports = {
   id: "90xl-view-3",
   name: "90 XL View 3",
   symbols: SYMBOLS,
   groups: GROUPS,
+  statColumns: STAT_COLUMNS,
   isValidGroup: (g) => GROUP_KEYS.has(g),
   calculate,
   calculateRow,

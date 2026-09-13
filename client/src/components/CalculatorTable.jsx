@@ -53,7 +53,9 @@ function SymbolCell({ children, onDelete }) {
   );
 }
 
-export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow }) {
+export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statColumns }) {
+  const cols = statColumns && statColumns.length > 0 ? statColumns : [{ key: "avg", label: "AVG" }];
+
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
       <table className="min-w-full border-collapse bg-white dark:bg-slate-900">
@@ -64,11 +66,11 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow }) {
             <Th>HIGH</Th>
             <Th>LOW</Th>
             <Th>CLOSE</Th>
-            <Th>HLC A</Th>
-            <Th>AVG</Th>
-            <Th>H-L</Th>
-            <Th style={{ color: "var(--ladder-open)" }}>TODAY OPEN</Th>
-            <Th>L-C</Th>
+            {cols.map((col) => (
+              <Th key={col.key} style={col.key === "todayOpen" ? { color: "var(--ladder-open)" } : undefined}>
+                {col.label}
+              </Th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -89,11 +91,11 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow }) {
                     />
                   </td>
                 ))}
-                <Td>{fmt(row.block1.hlcA)}</Td>
-                <Td>{fmt(row.block1.avg)}</Td>
-                <Td>{fmt(row.block1.varHL)}</Td>
-                <Td style={{ color: "var(--ladder-open)" }}>{fmt(row.todayOpen)}</Td>
-                <Td>{fmt(row.block1.lowClose)}</Td>
+                {cols.map((col) => (
+                  <Td key={col.key} style={col.key === "todayOpen" ? { color: "var(--ladder-open)" } : undefined}>
+                    {fmt(col.key === "todayOpen" ? row.todayOpen : row.block1[col.key])}
+                  </Td>
+                ))}
               </tr>
             );
           })}
@@ -104,7 +106,7 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow }) {
 }
 
 export function TradeLevelsTable({ rows }) {
-  const maxTargets = Math.max(...rows.map((r) => r.block2.targetsUp.length), 5);
+  const maxTargets = Math.max(...rows.map((r) => r.block2.targetsUp.length));
   const targetCols = Array.from({ length: maxTargets }, (_, i) => i);
   const ordinal = ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH"];
   const targetColor = (i) => TARGET_COLOR_VARS[i] || FAR_TARGET_COLOR;

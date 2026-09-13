@@ -2,8 +2,9 @@
 // (same shape as 90xl-view-3.js: { id, name, symbols, calculate }) and add it here.
 // No other server code needs to change.
 const view3 = require("./90xl-view-3");
+const view = require("./90xl-view");
 
-const REGISTRY = [view3];
+const REGISTRY = [view3, view];
 
 function listTemplates() {
   return REGISTRY.map((t) => ({ id: t.id, name: t.name }));

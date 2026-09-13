@@ -113,6 +113,7 @@ router.get("/:id", async (req, res) => {
     id: tpl.id,
     name: tpl.name,
     groups: tpl.groups,
+    statColumns: tpl.statColumns,
     rows: buildRows(tpl, overrides),
     customRows: overrides.custom,
     hiddenKeys: [...overrides.hidden],

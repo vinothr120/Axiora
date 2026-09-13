@@ -28,6 +28,7 @@ export default function Calculator() {
   const [templates, setTemplates] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [groups, setGroups] = useState([]);
+  const [statColumns, setStatColumns] = useState([]);
   const [rows, setRows] = useState(null);
   const [inputs, setInputs] = useState({});
   const [customMeta, setCustomMeta] = useState({});
@@ -50,10 +51,11 @@ export default function Calculator() {
     setStatus("loading");
     api
       .getTemplate(activeId)
-      .then(({ rows, groups, customRows, hiddenKeys }) => {
+      .then(({ rows, groups, statColumns, customRows, hiddenKeys }) => {
         setRows(rows);
         setInputs(rowsToInputs(rows));
         setGroups(groups);
+        setStatColumns(statColumns || []);
         setCustomMeta(customMetaFromRows(customRows));
         setHiddenKeys(new Set(hiddenKeys));
         setStatus("ready");
@@ -206,7 +208,7 @@ export default function Calculator() {
                   Reset to default
                 </button>
               </div>
-              <InputsAndStatsTable rows={rows} inputs={inputs} onChange={handleChange} onDeleteRow={handleDeleteRow} />
+              <InputsAndStatsTable rows={rows} inputs={inputs} onChange={handleChange} onDeleteRow={handleDeleteRow} statColumns={statColumns} />
               {groups.length > 0 && <AddRowForm groups={groups} onAdd={handleAddRow} />}
             </section>
 
