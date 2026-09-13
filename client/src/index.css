@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* Same pattern as SchoolAssist (D:\Projects\SchoolAssist\web\src\index.css): class-based
+   dark mode toggled explicitly via ThemeContext adding/removing `dark` on <html>, not just
+   following the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Role accent — swapped per [data-role] on <html> (admin vs client), same mechanism
+     as SchoolAssist's admin/teacher/parent accents. Values below are identical to
+     SchoolAssist's admin (indigo) and teacher (teal) role colors, reused here so Axiora
+     reads as the same product family. */
+  --role-accent: #4f46e5;
+  --role-accent-dark: #4338ca;
+  --role-accent-soft: #eef2ff;
+  --role-accent-rgb: 79, 70, 229;
+}
+
+[data-role="admin"] {
+  --role-accent: #4f46e5;
+  --role-accent-dark: #4338ca;
+  --role-accent-soft: #eef2ff;
+  --role-accent-rgb: 79, 70, 229;
+}
+
+[data-role="client"] {
+  --role-accent: #0d9488;
+  --role-accent-dark: #0f766e;
+  --role-accent-soft: #f0fdfa;
+  --role-accent-rgb: 13, 148, 136;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+.dark[data-role="admin"] {
+  --role-accent: #818cf8;
+  --role-accent-dark: #6366f1;
+  --role-accent-soft: #1e1b4b;
+  --role-accent-rgb: 129, 140, 248;
+}
+
+.dark[data-role="client"] {
+  --role-accent: #2dd4bf;
+  --role-accent-dark: #14b8a6;
+  --role-accent-soft: #042f2e;
+  --role-accent-rgb: 45, 212, 191;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  background-color: #f8fafc;
+}
+
+.dark body {
+  background-color: #0f172a;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: none;
+  border-color: var(--role-accent);
+  box-shadow: 0 0 0 3px rgba(var(--role-accent-rgb), 0.15);
+}
+
+/* Tabular numeric cells (OHLC inputs, computed targets) — mono keeps digits aligned,
+   matching the brand's own "KPI/data label" typography role. */
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
