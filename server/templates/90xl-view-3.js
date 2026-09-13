@@ -108,14 +108,25 @@ function calculateBlock2Group(group, { open, high, low, close }, avg) {
   };
 }
 
-function calculateSymbol(symbolDef, ohlc) {
+const GROUPS = [
+  { key: "A", label: "Standard (% ladder — Silver/Gold/Nifty style)" },
+  { key: "A_OFFSET", label: "Crude-oil style (hybrid % + point ladder)" },
+  { key: "B", label: "Point-offset ladder (Copper/base-metal style)" },
+];
+const GROUP_KEYS = new Set(GROUPS.map((g) => g.key));
+
+// Reusable for both the built-in symbol board and user-added custom rows — a custom
+// row is just { key, label, group } with no preset defaults/todayOpen.
+function calculateRow({ key, label, group, todayOpen = null }, ohlc) {
   const block1 = calculateBlock1(ohlc);
-  const block2 = calculateBlock2Group(symbolDef.group, ohlc, block1.avg);
+  const block2 = calculateBlock2Group(group, ohlc, block1.avg);
   return {
-    key: symbolDef.key,
-    label: symbolDef.label,
+    key,
+    label,
+    group,
+    isCustom: !SYMBOLS.some((s) => s.key === key),
     input: ohlc,
-    todayOpen: ohlc.todayOpen ?? symbolDef.defaults.todayOpen ?? null,
+    todayOpen: ohlc.todayOpen ?? todayOpen,
     block1,
     block2,
   };
@@ -125,7 +136,7 @@ function calculateSymbol(symbolDef, ohlc) {
 function calculate(input = {}) {
   return SYMBOLS.map((symbolDef) => {
     const ohlc = { ...symbolDef.defaults, ...(input[symbolDef.key] || {}) };
-    return calculateSymbol(symbolDef, ohlc);
+    return calculateRow(symbolDef, ohlc);
   });
 }
 
@@ -133,5 +144,8 @@ module.exports = {
   id: "90xl-view-3",
   name: "90 XL View 3",
   symbols: SYMBOLS,
+  groups: GROUPS,
+  isValidGroup: (g) => GROUP_KEYS.has(g),
   calculate,
+  calculateRow,
 };

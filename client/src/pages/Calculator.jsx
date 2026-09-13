@@ -5,6 +5,7 @@ import { useClientAuth } from "../core/ClientAuthContext";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { InputsAndStatsTable, TradeLevelsTable } from "../components/CalculatorTable";
+import AddRowForm from "../components/AddRowForm";
 
 function rowsToInputs(rows) {
   const map = {};
@@ -14,14 +15,23 @@ function rowsToInputs(rows) {
   return map;
 }
 
+function customMetaFromRows(customRows) {
+  const map = {};
+  for (const c of customRows) map[c.key] = { label: c.label, group: c.group };
+  return map;
+}
+
 export default function Calculator() {
   const { info, logout } = useClientAuth();
   const navigate = useNavigate();
 
   const [templates, setTemplates] = useState([]);
   const [activeId, setActiveId] = useState(null);
+  const [groups, setGroups] = useState([]);
   const [rows, setRows] = useState(null);
   const [inputs, setInputs] = useState({});
+  const [customMeta, setCustomMeta] = useState({});
+  const [hiddenKeys, setHiddenKeys] = useState(new Set());
   const [status, setStatus] = useState("loading"); // loading | ready | recalculating | error
   const debounceRef = useRef(null);
 
@@ -40,9 +50,12 @@ export default function Calculator() {
     setStatus("loading");
     api
       .getTemplate(activeId)
-      .then(({ rows }) => {
+      .then(({ rows, groups, customRows, hiddenKeys }) => {
         setRows(rows);
         setInputs(rowsToInputs(rows));
+        setGroups(groups);
+        setCustomMeta(customMetaFromRows(customRows));
+        setHiddenKeys(new Set(hiddenKeys));
         setStatus("ready");
       })
       .catch((err) => {
@@ -57,10 +70,10 @@ export default function Calculator() {
   }
 
   const recalculate = useCallback(
-    (nextInputs) => {
+    (payload) => {
       setStatus("recalculating");
       api
-        .calculate(activeId, nextInputs)
+        .calculate(activeId, payload)
         .then(({ rows }) => {
           setRows(rows);
           setStatus("ready");
@@ -74,6 +87,18 @@ export default function Calculator() {
     [activeId]
   );
 
+  function buildPayload(nextInputs, nextCustomMeta, nextHidden) {
+    const edits = {};
+    const custom = [];
+    for (const [key, ohlc] of Object.entries(nextInputs)) {
+      if ([ohlc.open, ohlc.high, ohlc.low, ohlc.close].some((n) => n === "" || !Number.isFinite(n))) continue;
+      const meta = nextCustomMeta[key];
+      if (meta) custom.push({ key, label: meta.label, group: meta.group, ...ohlc });
+      else edits[key] = ohlc;
+    }
+    return { edits, custom, hidden: [...nextHidden] };
+  }
+
   function handleChange(key, field, value) {
     const num = value === "" ? "" : Number(value);
     const nextInputs = { ...inputs, [key]: { ...inputs[key], [field]: num } };
@@ -81,19 +106,67 @@ export default function Calculator() {
 
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const complete = {};
-      for (const [k, v] of Object.entries(nextInputs)) {
-        if ([v.open, v.high, v.low, v.close].every((n) => n !== "" && Number.isFinite(n))) {
-          complete[k] = v;
-        }
-      }
-      recalculate(complete);
+      recalculate(buildPayload(nextInputs, customMeta, hiddenKeys));
     }, 400);
+  }
+
+  function handleAddRow(newRow) {
+    const { key, label, group, open, high, low, close } = newRow;
+    const nextInputs = { ...inputs, [key]: { open, high, low, close } };
+    const nextCustomMeta = { ...customMeta, [key]: { label, group } };
+    setInputs(nextInputs);
+    setCustomMeta(nextCustomMeta);
+    clearTimeout(debounceRef.current);
+    recalculate(buildPayload(nextInputs, nextCustomMeta, hiddenKeys));
+  }
+
+  function handleDeleteRow(key) {
+    const nextInputs = { ...inputs };
+    delete nextInputs[key];
+    let nextCustomMeta = customMeta;
+    let nextHidden = hiddenKeys;
+    if (customMeta[key]) {
+      nextCustomMeta = { ...customMeta };
+      delete nextCustomMeta[key];
+      setCustomMeta(nextCustomMeta);
+    } else {
+      nextHidden = new Set(hiddenKeys);
+      nextHidden.add(key);
+      setHiddenKeys(nextHidden);
+    }
+    setInputs(nextInputs);
+    setRows((prev) => prev.filter((r) => r.key !== key));
+    clearTimeout(debounceRef.current);
+    recalculate(buildPayload(nextInputs, nextCustomMeta, nextHidden));
+  }
+
+  function handleReset() {
+    clearTimeout(debounceRef.current);
+    setStatus("recalculating");
+    api
+      .resetTemplate(activeId)
+      .then(({ rows, customRows, hiddenKeys }) => {
+        setRows(rows);
+        setInputs(rowsToInputs(rows));
+        setCustomMeta(customMetaFromRows(customRows || []));
+        setHiddenKeys(new Set(hiddenKeys || []));
+        setStatus("ready");
+      })
+      .catch((err) => {
+        if (err.status === 401) handleSessionLost();
+        else setStatus("error");
+      });
   }
 
   return (
     <div data-role="client" className="flex min-h-svh flex-col bg-slate-50 dark:bg-slate-950">
-      <Header eyebrow="Client" title={info?.label || "Trading calculator"} userLabel={info?.expiresAt ? `Access until ${info.expiresAt.slice(0, 10)}` : undefined} onLogout={logout} />
+      <Header
+        eyebrow="Client"
+        title={info?.label || "Trading calculator"}
+        userLabel={info?.expiresAt ? `Access until ${info.expiresAt.slice(0, 10)}` : undefined}
+        onLogout={logout}
+        loading={status === "recalculating"}
+      />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         {templates.length > 1 && (
@@ -125,9 +198,16 @@ export default function Calculator() {
                 <h2 className="font-heading text-sm font-semibold text-slate-700 dark:text-slate-200">
                   Inputs &amp; stats
                 </h2>
-                {status === "recalculating" && <span className="text-xs text-slate-400">Recalculating…</span>}
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="text-xs font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                >
+                  Reset to default
+                </button>
               </div>
-              <InputsAndStatsTable rows={rows} inputs={inputs} onChange={handleChange} />
+              <InputsAndStatsTable rows={rows} inputs={inputs} onChange={handleChange} onDeleteRow={handleDeleteRow} />
+              {groups.length > 0 && <AddRowForm groups={groups} onAdd={handleAddRow} />}
             </section>
 
             <section>

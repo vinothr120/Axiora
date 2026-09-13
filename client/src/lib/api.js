@@ -23,8 +23,9 @@ export const api = {
   // calculator
   listTemplates: () => request("/templates"),
   getTemplate: (id) => request(`/templates/${id}`),
-  calculate: (id, symbols) =>
-    request(`/templates/${id}/calculate`, { method: "POST", body: JSON.stringify({ symbols }) }),
+  calculate: (id, { edits, custom, hidden }) =>
+    request(`/templates/${id}/calculate`, { method: "POST", body: JSON.stringify({ edits, custom, hidden }) }),
+  resetTemplate: (id) => request(`/templates/${id}/reset`, { method: "POST" }),
 
   // admin
   adminLogin: (username, password) =>

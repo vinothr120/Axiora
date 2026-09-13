@@ -47,6 +47,23 @@ const MYSQL_DDL = [
     last_activity_at VARCHAR(19) NOT NULL,
     FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE
   ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS code_overrides (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code_id INT NOT NULL,
+    template_id VARCHAR(64) NOT NULL,
+    symbol_key VARCHAR(80) NOT NULL,
+    kind ENUM('edit', 'custom', 'hidden') NOT NULL,
+    label VARCHAR(128) NULL,
+    group_key VARCHAR(16) NULL,
+    open_val DOUBLE NULL,
+    high_val DOUBLE NULL,
+    low_val DOUBLE NULL,
+    close_val DOUBLE NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    updated_at VARCHAR(19) NOT NULL,
+    UNIQUE KEY uniq_code_tpl_symbol (code_id, template_id, symbol_key),
+    FOREIGN KEY (code_id) REFERENCES access_codes(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB`,
 ];
 
 const SQLITE_DDL = [
@@ -80,6 +97,22 @@ const SQLITE_DDL = [
     admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL,
     last_activity_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS code_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code_id INTEGER NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
+    template_id TEXT NOT NULL,
+    symbol_key TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('edit', 'custom', 'hidden')),
+    label TEXT NULL,
+    group_key TEXT NULL,
+    open_val REAL NULL,
+    high_val REAL NULL,
+    low_val REAL NULL,
+    close_val REAL NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    UNIQUE (code_id, template_id, symbol_key)
   )`,
 ];
 
