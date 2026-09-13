@@ -1,32 +1,29 @@
 import { useState } from "react";
 
-const FIELDS = ["open", "high", "low", "close"];
 const FIELD_LABELS = { open: "Open", high: "High", low: "Low", close: "Close" };
 
-export default function AddRowForm({ groups, onAdd }) {
+export default function AddRowForm({ groups, inputFields, onAdd }) {
+  const fields = inputFields && inputFields.length > 0 ? inputFields : ["open", "high", "low", "close"];
   const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState("");
-  const [group, setGroup] = useState(groups[0]?.key || "A");
-  const [values, setValues] = useState({ open: "", high: "", low: "", close: "" });
+  const [group, setGroup] = useState(groups[0]?.key);
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map((f) => [f, ""])));
 
   function reset() {
     setName("");
-    setValues({ open: "", high: "", low: "", close: "" });
+    setValues(Object.fromEntries(fields.map((f) => [f, ""])));
     setExpanded(false);
   }
 
   function handleSubmit(e) {
     e.preventDefault();
-    const nums = FIELDS.map((f) => Number(values[f]));
-    if (!name.trim() || nums.some((n) => !Number.isFinite(n))) return;
+    const entries = fields.map((f) => [f, Number(values[f])]);
+    if (!name.trim() || entries.some(([, n]) => !Number.isFinite(n))) return;
     onAdd({
       key: `custom-${crypto.randomUUID()}`,
       label: name.trim(),
       group,
-      open: nums[0],
-      high: nums[1],
-      low: nums[2],
-      close: nums[3],
+      ...Object.fromEntries(entries),
     });
     reset();
   }
@@ -58,23 +55,25 @@ export default function AddRowForm({ groups, onAdd }) {
           className="w-36 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
         />
       </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Formula style</label>
-        <select
-          value={group}
-          onChange={(e) => setGroup(e.target.value)}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-        >
-          {groups.map((g) => (
-            <option key={g.key} value={g.key}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      {FIELDS.map((f) => (
+      {groups.length > 1 && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Formula style</label>
+          <select
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          >
+            {groups.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {fields.map((f) => (
         <div key={f}>
-          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">{FIELD_LABELS[f]}</label>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">{FIELD_LABELS[f] || f}</label>
           <input
             type="number"
             inputMode="decimal"

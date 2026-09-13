@@ -4,14 +4,12 @@ import { api } from "../lib/api";
 import { useClientAuth } from "../core/ClientAuthContext";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { InputsAndStatsTable, TradeLevelsTable } from "../components/CalculatorTable";
+import { InputsAndStatsTable, TradeLevelsTable, FibonacciLadderTable } from "../components/CalculatorTable";
 import AddRowForm from "../components/AddRowForm";
 
 function rowsToInputs(rows) {
   const map = {};
-  for (const row of rows) {
-    map[row.key] = { open: row.input.open, high: row.input.high, low: row.input.low, close: row.input.close };
-  }
+  for (const row of rows) map[row.key] = { ...row.input };
   return map;
 }
 
@@ -29,6 +27,8 @@ export default function Calculator() {
   const [activeId, setActiveId] = useState(null);
   const [groups, setGroups] = useState([]);
   const [statColumns, setStatColumns] = useState([]);
+  const [inputFields, setInputFields] = useState(["open", "high", "low", "close"]);
+  const [layout, setLayout] = useState("ladder");
   const [rows, setRows] = useState(null);
   const [inputs, setInputs] = useState({});
   const [customMeta, setCustomMeta] = useState({});
@@ -51,11 +51,13 @@ export default function Calculator() {
     setStatus("loading");
     api
       .getTemplate(activeId)
-      .then(({ rows, groups, statColumns, customRows, hiddenKeys }) => {
+      .then(({ rows, groups, statColumns, inputFields, layout, customRows, hiddenKeys }) => {
         setRows(rows);
         setInputs(rowsToInputs(rows));
         setGroups(groups);
         setStatColumns(statColumns || []);
+        setInputFields(inputFields && inputFields.length > 0 ? inputFields : ["open", "high", "low", "close"]);
+        setLayout(layout || "ladder");
         setCustomMeta(customMetaFromRows(customRows));
         setHiddenKeys(new Set(hiddenKeys));
         setStatus("ready");
@@ -93,7 +95,7 @@ export default function Calculator() {
     const edits = {};
     const custom = [];
     for (const [key, ohlc] of Object.entries(nextInputs)) {
-      if ([ohlc.open, ohlc.high, ohlc.low, ohlc.close].some((n) => n === "" || !Number.isFinite(n))) continue;
+      if (inputFields.some((f) => ohlc[f] === "" || !Number.isFinite(ohlc[f]))) continue;
       const meta = nextCustomMeta[key];
       if (meta) custom.push({ key, label: meta.label, group: meta.group, ...ohlc });
       else edits[key] = ohlc;
@@ -113,8 +115,8 @@ export default function Calculator() {
   }
 
   function handleAddRow(newRow) {
-    const { key, label, group, open, high, low, close } = newRow;
-    const nextInputs = { ...inputs, [key]: { open, high, low, close } };
+    const { key, label, group, ...ohlc } = newRow;
+    const nextInputs = { ...inputs, [key]: ohlc };
     const nextCustomMeta = { ...customMeta, [key]: { label, group } };
     setInputs(nextInputs);
     setCustomMeta(nextCustomMeta);
@@ -208,15 +210,22 @@ export default function Calculator() {
                   Reset to default
                 </button>
               </div>
-              <InputsAndStatsTable rows={rows} inputs={inputs} onChange={handleChange} onDeleteRow={handleDeleteRow} statColumns={statColumns} />
-              {groups.length > 0 && <AddRowForm groups={groups} onAdd={handleAddRow} />}
+              <InputsAndStatsTable
+                rows={rows}
+                inputs={inputs}
+                onChange={handleChange}
+                onDeleteRow={handleDeleteRow}
+                statColumns={statColumns}
+                inputFields={inputFields}
+              />
+              {groups.length > 0 && <AddRowForm groups={groups} inputFields={inputFields} onAdd={handleAddRow} />}
             </section>
 
             <section>
               <h2 className="mb-2 font-heading text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Trade levels
               </h2>
-              <TradeLevelsTable rows={rows} />
+              {layout === "fibonacci" ? <FibonacciLadderTable rows={rows} /> : <TradeLevelsTable rows={rows} />}
             </section>
           </div>
         )}

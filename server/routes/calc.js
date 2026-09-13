@@ -46,8 +46,8 @@ function buildRows(tpl, { edits, custom, hidden }) {
     rows.push(tpl.calculateRow(symbolDef, ohlc));
   }
   for (const c of custom) {
-    const { open, high, low, close } = c;
-    rows.push(tpl.calculateRow({ key: c.key, label: c.label, group: c.group }, { open, high, low, close }));
+    const { key, label, group, ...ohlc } = c;
+    rows.push(tpl.calculateRow({ key, label, group }, ohlc));
   }
   return rows;
 }
@@ -57,16 +57,17 @@ async function persistOverrides(codeId, templateId, tpl, { edits, custom, hidden
 
   const nowSql = db.toSqlDateTime();
   const defaultsByKey = Object.fromEntries(tpl.symbols.map((s) => [s.key, s.defaults]));
+  const fields = tpl.inputFields;
 
   for (const [key, ohlc] of Object.entries(edits)) {
     const d = defaultsByKey[key];
     if (!d) continue;
-    const changed = d.open !== ohlc.open || d.high !== ohlc.high || d.low !== ohlc.low || d.close !== ohlc.close;
+    const changed = fields.some((f) => d[f] !== ohlc[f]);
     if (!changed) continue;
     await db.run(
       `INSERT INTO code_overrides (code_id, template_id, symbol_key, kind, open_val, high_val, low_val, close_val, updated_at)
        VALUES (?, ?, ?, 'edit', ?, ?, ?, ?, ?)`,
-      [codeId, templateId, key, ohlc.open, ohlc.high, ohlc.low, ohlc.close, nowSql]
+      [codeId, templateId, key, ohlc.open ?? null, ohlc.high ?? null, ohlc.low ?? null, ohlc.close ?? null, nowSql]
     );
   }
 
@@ -75,7 +76,7 @@ async function persistOverrides(codeId, templateId, tpl, { edits, custom, hidden
     await db.run(
       `INSERT INTO code_overrides (code_id, template_id, symbol_key, kind, label, group_key, open_val, high_val, low_val, close_val, sort_order, updated_at)
        VALUES (?, ?, ?, 'custom', ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [codeId, templateId, c.key, c.label, c.group, c.open, c.high, c.low, c.close, order++, nowSql]
+      [codeId, templateId, c.key, c.label, c.group, c.open ?? null, c.high ?? null, c.low ?? null, c.close ?? null, order++, nowSql]
     );
   }
 
@@ -112,6 +113,8 @@ router.get("/:id", async (req, res) => {
   res.json({
     id: tpl.id,
     name: tpl.name,
+    layout: tpl.layout || "ladder",
+    inputFields: tpl.inputFields,
     groups: tpl.groups,
     statColumns: tpl.statColumns,
     rows: buildRows(tpl, overrides),
@@ -127,12 +130,23 @@ router.post("/:id/calculate", async (req, res) => {
   const validKeys = new Set(tpl.symbols.map((s) => s.key));
   const body = req.body || {};
 
+  // Only the fields this template actually uses as inputs (e.g. some templates have
+  // no OPEN/CLOSE, just HIGH/LOW) need to be present and numeric.
+  function sanitizeOhlc(raw) {
+    const out = {};
+    for (const f of tpl.inputFields) {
+      const n = Number(raw?.[f]);
+      if (!Number.isFinite(n)) return null;
+      out[f] = n;
+    }
+    return out;
+  }
+
   const sanitizedEdits = {};
   for (const [key, ohlc] of Object.entries(body.edits || {})) {
     if (!validKeys.has(key)) continue;
-    const nums = [ohlc?.open, ohlc?.high, ohlc?.low, ohlc?.close].map(Number);
-    if (nums.some((n) => !Number.isFinite(n))) continue;
-    sanitizedEdits[key] = { open: nums[0], high: nums[1], low: nums[2], close: nums[3] };
+    const clean = sanitizeOhlc(ohlc);
+    if (clean) sanitizedEdits[key] = clean;
   }
 
   const sanitizedCustom = [];
@@ -141,9 +155,8 @@ router.post("/:id/calculate", async (req, res) => {
     const label = String(c?.label || "").trim().slice(0, 128);
     if (!key.startsWith("custom-") || !label || validKeys.has(key)) continue;
     if (!tpl.isValidGroup(c?.group)) continue;
-    const nums = [c?.open, c?.high, c?.low, c?.close].map(Number);
-    if (nums.some((n) => !Number.isFinite(n))) continue;
-    sanitizedCustom.push({ key, label, group: c.group, open: nums[0], high: nums[1], low: nums[2], close: nums[3] });
+    const clean = sanitizeOhlc(c);
+    if (clean) sanitizedCustom.push({ key, label, group: c.group, ...clean });
   }
 
   // Only built-in symbols need a "hidden" marker — a removed custom row is simply

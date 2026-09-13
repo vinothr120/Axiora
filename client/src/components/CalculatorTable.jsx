@@ -1,4 +1,3 @@
-const FIELDS = ["open", "high", "low", "close"];
 const FIELD_LABELS = { open: "OPEN", high: "HIGH", low: "LOW", close: "CLOSE" };
 
 // Ladder color roles ported from the source workbook's own font colors (see index.css
@@ -53,8 +52,9 @@ function SymbolCell({ children, onDelete }) {
   );
 }
 
-export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statColumns }) {
+export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statColumns, inputFields }) {
   const cols = statColumns && statColumns.length > 0 ? statColumns : [{ key: "avg", label: "AVG" }];
+  const fields = inputFields && inputFields.length > 0 ? inputFields : ["open", "high", "low", "close"];
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
@@ -62,10 +62,11 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statC
         <thead>
           <tr>
             <Th className="sticky left-0 z-[1] bg-slate-50 text-left dark:bg-slate-800">Symbol</Th>
-            <Th style={{ color: "var(--ladder-open)" }}>OPEN</Th>
-            <Th>HIGH</Th>
-            <Th>LOW</Th>
-            <Th>CLOSE</Th>
+            {fields.map((f) => (
+              <Th key={f} style={f === "open" ? { color: "var(--ladder-open)" } : undefined}>
+                {FIELD_LABELS[f] || f.toUpperCase()}
+              </Th>
+            ))}
             {cols.map((col) => (
               <Th key={col.key} style={col.key === "todayOpen" ? { color: "var(--ladder-open)" } : undefined}>
                 {col.label}
@@ -79,7 +80,7 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statC
             return (
               <tr key={row.key} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
                 <SymbolCell onDelete={onDeleteRow ? () => onDeleteRow(row.key) : undefined}>{row.label}</SymbolCell>
-                {FIELDS.map((f) => (
+                {fields.map((f) => (
                   <td key={f} className="whitespace-nowrap px-1.5 py-1">
                     <input
                       type="number"
@@ -153,6 +154,53 @@ export function TradeLevelsTable({ rows }) {
                 </Td>
               ))}
               <Td style={{ color: "var(--ladder-sl)" }}>{fmt(row.block2.stopLossSell)}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// For Fibonacci-ladder templates: one BUY/SELL pair per ratio level (columns), one
+// symbol per row. The 100% ratio (the actual high/low, not an extrapolated level) is
+// bolded to mark it as the key level — the source sheet singles it out with its own
+// color too, inconsistently across the other 19 rows, so a clean bold beats copying that.
+export function FibonacciLadderTable({ rows }) {
+  const levels = rows[0]?.fibLevels || [];
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+      <table className="min-w-full border-collapse bg-white dark:bg-slate-900">
+        <thead>
+          <tr>
+            <Th className="sticky left-0 z-[1] bg-slate-50 text-left dark:bg-slate-800">Symbol</Th>
+            {levels.map((lvl) => (
+              <Th key={`${lvl.ratio}-b`} style={{ color: "var(--ladder-open)" }}>
+                Buy {lvl.label}%
+              </Th>
+            ))}
+            {levels.map((lvl) => (
+              <Th key={`${lvl.ratio}-s`} style={{ color: "var(--ladder-sl)" }}>
+                Sell {lvl.label}%
+              </Th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
+              <SymbolCell>{row.label}</SymbolCell>
+              {row.fibLevels.map((lvl) => (
+                <Td key={`${lvl.ratio}-b`} className={lvl.ratio === 1 ? "font-semibold" : undefined} style={{ color: "var(--ladder-open)" }}>
+                  {fmt(lvl.buy)}
+                </Td>
+              ))}
+              {row.fibLevels.map((lvl) => (
+                <Td key={`${lvl.ratio}-s`} className={lvl.ratio === 1 ? "font-semibold" : undefined} style={{ color: "var(--ladder-sl)" }}>
+                  {fmt(lvl.sell)}
+                </Td>
+              ))}
             </tr>
           ))}
         </tbody>

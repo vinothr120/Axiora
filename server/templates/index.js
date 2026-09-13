@@ -3,8 +3,9 @@
 // No other server code needs to change.
 const view3 = require("./90xl-view-3");
 const view = require("./90xl-view");
+const view5 = require("./90xl-view-5");
 
-const REGISTRY = [view3, view];
+const REGISTRY = [view3, view, view5];
 
 function listTemplates() {
   return REGISTRY.map((t) => ({ id: t.id, name: t.name }));

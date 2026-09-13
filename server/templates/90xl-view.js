@@ -126,6 +126,8 @@ const STAT_COLUMNS = [
 module.exports = {
   id: "90xl-view",
   name: "90 XL View",
+  layout: "ladder",
+  inputFields: ["open", "high", "low", "close"],
   symbols: SYMBOLS,
   groups: GROUPS,
   statColumns: STAT_COLUMNS,
