@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { useClientAuth } from "../core/ClientAuthContext";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { InputsAndStatsTable, TradeLevelsTable, FibonacciLadderTable } from "../components/CalculatorTable";
+import { InputsAndStatsTable, TradeLevelsTable, FibonacciLadderTable, MptLevelsTable } from "../components/CalculatorTable";
 import AddRowForm from "../components/AddRowForm";
 
 function rowsToInputs(rows) {
@@ -225,7 +225,9 @@ export default function Calculator() {
               <h2 className="mb-2 font-heading text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Trade levels
               </h2>
-              {layout === "fibonacci" ? <FibonacciLadderTable rows={rows} /> : <TradeLevelsTable rows={rows} />}
+              {layout === "fibonacci" && <FibonacciLadderTable rows={rows} />}
+              {layout === "mpt" && <MptLevelsTable rows={rows} />}
+              {layout === "ladder" && <TradeLevelsTable rows={rows} />}
             </section>
           </div>
         )}

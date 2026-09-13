@@ -208,3 +208,61 @@ export function FibonacciLadderTable({ rows }) {
     </div>
   );
 }
+
+// For MPT templates: a base anchor value (MPT) plus 5 named high/low pairs, each pair
+// with its own color ported from the source (which — unlike 90xl-view-5 — colors these
+// consistently, one hue per pair, no row-to-row variation).
+const MPT_LEVEL_COLORS = [
+  { high: "var(--ladder-tgt-far)", low: "var(--ladder-sl)" },
+  { high: "var(--ladder-tgt1)", low: "var(--mpt-darkred)" },
+  { high: "var(--mpt-orange)", low: "var(--mpt-orange)" },
+  { high: "var(--ladder-tgt1)", low: "var(--ladder-tgt1)" },
+  { high: "var(--mpt-magenta)", low: "var(--mpt-magenta)" },
+];
+
+export function MptLevelsTable({ rows }) {
+  const levels = rows[0]?.levels || [];
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+      <table className="min-w-full border-collapse bg-white dark:bg-slate-900">
+        <thead>
+          <tr>
+            <Th className="sticky left-0 z-[1] bg-slate-50 text-left dark:bg-slate-800">Symbol</Th>
+            <Th style={{ color: "var(--mpt-anchor)" }}>MPT</Th>
+            {levels.map((lvl, i) => (
+              <Th key={`${lvl.label}-h`} style={{ color: MPT_LEVEL_COLORS[i]?.high }}>
+                {lvl.highLabel}
+              </Th>
+            ))}
+            {levels.map((lvl, i) => (
+              <Th key={`${lvl.label}-l`} style={{ color: MPT_LEVEL_COLORS[i]?.low }}>
+                {lvl.lowLabel}
+              </Th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
+              <SymbolCell>{row.label}</SymbolCell>
+              <Td className="font-semibold" style={{ color: "var(--mpt-anchor)" }}>
+                {fmt(row.mpt)}
+              </Td>
+              {row.levels.map((lvl, i) => (
+                <Td key={`${lvl.label}-h`} style={{ color: MPT_LEVEL_COLORS[i]?.high }}>
+                  {fmt(lvl.high)}
+                </Td>
+              ))}
+              {row.levels.map((lvl, i) => (
+                <Td key={`${lvl.label}-l`} style={{ color: MPT_LEVEL_COLORS[i]?.low }}>
+                  {fmt(lvl.low)}
+                </Td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

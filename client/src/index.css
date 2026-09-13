@@ -76,6 +76,22 @@
   --ladder-sl: #f87171;
 }
 
+:root {
+  /* MPT template's own font colors — a clean, consistent palette (unlike 90xl-view-5's
+     row-inconsistent one), so ported directly per level pair. */
+  --mpt-anchor: #0000ff;
+  --mpt-darkred: #a30000;
+  --mpt-orange: #c1440e;
+  --mpt-magenta: #c026d3;
+}
+
+.dark {
+  --mpt-anchor: #60a5fa;
+  --mpt-darkred: #fca5a5;
+  --mpt-orange: #fb923c;
+  --mpt-magenta: #e879f9;
+}
+
 body {
   margin: 0;
   font-family: var(--font-body);
