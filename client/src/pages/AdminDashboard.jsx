@@ -382,12 +382,12 @@ export default function AdminDashboard() {
                 <tbody>
                   {filtered.map((c) => (
                     <tr key={c.id} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
-                      <td className="figure px-2 py-2 font-medium text-slate-900 dark:text-white">{c.code}</td>
+                      <td className="figure whitespace-nowrap px-2 py-2 font-medium text-slate-900 dark:text-white">{c.code}</td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.label || "–"}</td>
                       <td className="px-2 py-2">
                         <StatusBadge status={c.status} isExpired={c.isExpired} />
                       </td>
-                      <td className="max-w-xs truncate px-2 py-2 text-xs text-slate-600 dark:text-slate-300" title={templatesSummary(c, templates)}>
+                      <td className="max-w-xs px-2 py-2 text-xs text-slate-600 dark:text-slate-300" title={templatesSummary(c, templates)}>
                         {templatesSummary(c, templates)}
                       </td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.durationDays}</td>
