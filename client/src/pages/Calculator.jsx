@@ -19,6 +19,23 @@ function customMetaFromRows(customRows) {
   return map;
 }
 
+function formatAccessLabel(expiresAt) {
+  if (!expiresAt) return undefined;
+  const date = expiresAt.slice(0, 10);
+  const target = new Date(`${date}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysLeft = Math.round((target - today) / 86400000);
+
+  let suffix;
+  if (daysLeft > 1) suffix = `${daysLeft} days left`;
+  else if (daysLeft === 1) suffix = "1 day left";
+  else if (daysLeft === 0) suffix = "expires today";
+  else suffix = "expired";
+
+  return `Access until ${date} (${suffix})`;
+}
+
 export default function Calculator() {
   const { info, logout } = useClientAuth();
   const navigate = useNavigate();
@@ -169,7 +186,7 @@ export default function Calculator() {
       <Header
         eyebrow="Client"
         title={info?.label || "Trading calculator"}
-        userLabel={info?.expiresAt ? `Access until ${info.expiresAt.slice(0, 10)}` : undefined}
+        userLabel={formatAccessLabel(info?.expiresAt)}
         onLogout={logout}
         loading={status === "recalculating"}
       />
