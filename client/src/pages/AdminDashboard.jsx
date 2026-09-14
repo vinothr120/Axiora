@@ -169,6 +169,7 @@ function EditCodeModal({ code, allTemplates, onClose, onSaved }) {
 
 function RevokeConfirmModal({ code, onClose, onConfirm }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   return (
     <Modal title="Revoke access code?" onClose={onClose}>
       <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
@@ -176,6 +177,9 @@ function RevokeConfirmModal({ code, onClose, onConfirm }) {
         {code.label ? ` (${code.label})` : ""} will stop working immediately, and any active session will be signed out. This can be undone
         later by reactivating the code.
       </p>
+      {error && (
+        <p className="mb-3 text-xs text-red-600 dark:text-red-400">Couldn't revoke code ({error}). Please try again.</p>
+      )}
       <div className="flex justify-end gap-2">
         <button onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600">
           Cancel
@@ -183,8 +187,14 @@ function RevokeConfirmModal({ code, onClose, onConfirm }) {
         <button
           onClick={async () => {
             setBusy(true);
-            await onConfirm();
-            setBusy(false);
+            setError(null);
+            try {
+              await onConfirm();
+            } catch (err) {
+              setError(err.code || "request_failed");
+            } finally {
+              setBusy(false);
+            }
           }}
           disabled={busy}
           className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -198,6 +208,7 @@ function RevokeConfirmModal({ code, onClose, onConfirm }) {
 
 function DeleteConfirmModal({ code, onClose, onConfirm }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   return (
     <Modal title="Delete access code?" onClose={onClose}>
       <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
@@ -205,6 +216,9 @@ function DeleteConfirmModal({ code, onClose, onConfirm }) {
         {code.label ? ` (${code.label})` : ""} will be permanently deleted, along with its session and history. This cannot be undone —
         if you just want to stop it from working, use Revoke instead.
       </p>
+      {error && (
+        <p className="mb-3 text-xs text-red-600 dark:text-red-400">Couldn't delete code ({error}). Please try again.</p>
+      )}
       <div className="flex justify-end gap-2">
         <button onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600">
           Cancel
@@ -212,8 +226,14 @@ function DeleteConfirmModal({ code, onClose, onConfirm }) {
         <button
           onClick={async () => {
             setBusy(true);
-            await onConfirm();
-            setBusy(false);
+            setError(null);
+            try {
+              await onConfirm();
+            } catch (err) {
+              setError(err.code || "request_failed");
+            } finally {
+              setBusy(false);
+            }
           }}
           disabled={busy}
           className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -363,6 +383,7 @@ export default function AdminDashboard() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   const [genLabel, setGenLabel] = useState("");
   const [genDays, setGenDays] = useState(30);
@@ -370,6 +391,8 @@ export default function AdminDashboard() {
   const [genCount, setGenCount] = useState(10);
   const [genTemplates, setGenTemplates] = useState([]);
   const [genResult, setGenResult] = useState(null); // { type: "single", code } | { type: "bulk", codes }
+  const [genSubmitting, setGenSubmitting] = useState(false);
+  const [genError, setGenError] = useState(null);
 
   const [editingCode, setEditingCode] = useState(null);
   const [revokingCode, setRevokingCode] = useState(null);
@@ -394,15 +417,23 @@ export default function AdminDashboard() {
   async function handleGenerate(e) {
     e.preventDefault();
     setGenResult(null);
-    if (genMultiple) {
-      const { codes } = await api.bulkCreateCodes(genLabel || null, Number(genDays), Number(genCount), genTemplates);
-      setGenResult({ type: "bulk", codes });
-    } else {
-      const { code } = await api.createCode(genLabel || null, Number(genDays), genTemplates);
-      setGenResult({ type: "single", code: code.code });
+    setGenError(null);
+    setGenSubmitting(true);
+    try {
+      if (genMultiple) {
+        const { codes } = await api.bulkCreateCodes(genLabel || null, Number(genDays), Number(genCount), genTemplates);
+        setGenResult({ type: "bulk", codes });
+      } else {
+        const { code } = await api.createCode(genLabel || null, Number(genDays), genTemplates);
+        setGenResult({ type: "single", code: code.code });
+      }
+      setGenLabel("");
+      refresh();
+    } catch (err) {
+      setGenError(err.code || "request_failed");
+    } finally {
+      setGenSubmitting(false);
     }
-    setGenLabel("");
-    refresh();
   }
 
   async function handleRevoke(code) {
@@ -418,9 +449,12 @@ export default function AdminDashboard() {
 
   async function handleReactivate(id) {
     setPendingId(id);
+    setActionError(null);
     try {
       await api.reactivateCode(id);
       refresh();
+    } catch (err) {
+      setActionError(`Couldn't reactivate code (${err.code || "request_failed"}). Please try again.`);
     } finally {
       setPendingId(null);
     }
@@ -518,12 +552,18 @@ export default function AdminDashboard() {
 
             <button
               type="submit"
-              disabled={genTemplates.length === 0}
+              disabled={genTemplates.length === 0 || genSubmitting}
               className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: "var(--role-accent)" }}
             >
-              {genMultiple ? `Generate ${genCount || ""} codes` : "Generate code"}
+              {genSubmitting ? "Generating…" : genMultiple ? `Generate ${genCount || ""} codes` : "Generate code"}
             </button>
+
+            {genError && (
+              <p className="text-xs text-red-600 dark:text-red-400">
+                Couldn't generate code(s) ({genError}). Please try again.
+              </p>
+            )}
 
             {genResult && (
               <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
@@ -547,6 +587,14 @@ export default function AdminDashboard() {
         </Card>
 
         <Card title="All codes">
+          {actionError && (
+            <div className="mb-3 flex items-start justify-between gap-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-400">
+              <span>{actionError}</span>
+              <button type="button" onClick={() => setActionError(null)} className="font-semibold hover:underline">
+                Dismiss
+              </button>
+            </div>
+          )}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-2">
               {FILTERS.map((f) => (
