@@ -34,59 +34,146 @@ function Field({ label, children }) {
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white";
 
-function CodeTemplatesCell({ code, allTemplates, onSaved }) {
-  const [editing, setEditing] = useState(false);
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-4 font-heading text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function nameFor(allTemplates, id) {
+  return allTemplates.find((t) => t.id === id)?.name || id;
+}
+
+function templatesSummary(code, allTemplates) {
+  if (code.templates.length === 0) return "None";
+  const isAll = allTemplates.length > 0 && code.templates.length === allTemplates.length;
+  const anyRowEdit = code.templates.some((t) => t.canManageRows);
+  if (isAll && !anyRowEdit) return "All";
+  return code.templates.map((t) => `${nameFor(allTemplates, t.id)}${t.canManageRows ? " (rows)" : ""}`).join(", ");
+}
+
+function EditCodeModal({ code, allTemplates, onClose, onSaved }) {
+  const [label, setLabel] = useState(code.label || "");
+  const [days, setDays] = useState(code.durationDays);
+  const [expiresAt, setExpiresAt] = useState(code.expiresAt ? code.expiresAt.slice(0, 10) : "");
   const [selected, setSelected] = useState(code.templates);
   const [saving, setSaving] = useState(false);
-  const nameFor = (id) => allTemplates.find((t) => t.id === id)?.name || id;
-  const isAll = allTemplates.length > 0 && code.templates.length === allTemplates.length;
+  const [error, setError] = useState(null);
 
-  async function save() {
+  async function save(e) {
+    e.preventDefault();
     setSaving(true);
+    setError(null);
     try {
-      await api.setCodeTemplates(code.id, selected);
+      await api.editCode(code.id, {
+        label: label || null,
+        durationDays: Number(days),
+        expiresAt: code.activatedAt ? expiresAt || null : undefined,
+        templates: selected,
+      });
       onSaved();
-      setEditing(false);
+      onClose();
+    } catch (err) {
+      setError(err.code || "save_failed");
     } finally {
       setSaving(false);
     }
   }
 
-  if (!editing) {
-    const anyRowEdit = code.templates.some((t) => t.canManageRows);
-    const summary = code.templates.map((t) => `${nameFor(t.id)}${t.canManageRows ? " (rows)" : ""}`).join(", ");
-    const label = code.templates.length === 0 ? "None" : isAll && !anyRowEdit ? "All" : summary;
-    return (
-      <button
-        onClick={() => {
-          setSelected(code.templates);
-          setEditing(true);
-        }}
-        className="text-left text-xs text-slate-600 hover:underline dark:text-slate-300"
-        title="Click to edit"
-      >
-        {label}
-      </button>
-    );
-  }
-
   return (
-    <div className="w-56 space-y-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-      <TemplateCheckboxes templates={allTemplates} selected={selected} onChange={setSelected} />
-      <div className="flex gap-2">
-        <button
-          onClick={save}
-          disabled={saving || selected.length === 0}
-          className="rounded-md px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: "var(--role-accent)" }}
-        >
-          Save
-        </button>
-        <button onClick={() => setEditing(false)} className="rounded-md border border-slate-300 px-2 py-1 text-xs dark:border-slate-600">
+    <Modal title={`Edit ${code.code}`} onClose={onClose}>
+      <form onSubmit={save} className="space-y-3">
+        <Field label="Label">
+          <input className={inputCls} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Ramesh" />
+        </Field>
+        <Field label="Valid for (days)">
+          <input type="number" min="1" className={inputCls} value={days} onChange={(e) => setDays(e.target.value)} />
+        </Field>
+        {code.activatedAt ? (
+          <Field label="Expires on">
+            <input type="date" className={inputCls} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+          </Field>
+        ) : (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Not activated yet — expiry will be set {days} day(s) after first use.
+          </p>
+        )}
+        <TemplateCheckboxes templates={allTemplates} selected={selected} onChange={setSelected} />
+        {error && <p className="text-xs text-red-600 dark:text-red-400">Couldn't save changes ({error}). Please try again.</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving || selected.length === 0}
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: "var(--role-accent)" }}
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RevokeConfirmModal({ code, onClose, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal title="Revoke access code?" onClose={onClose}>
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+        <span className="figure font-semibold text-slate-900 dark:text-white">{code.code}</span>
+        {code.label ? ` (${code.label})` : ""} will stop working immediately, and any active session will be signed out. This can be undone
+        later by reactivating the code.
+      </p>
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600">
           Cancel
         </button>
+        <button
+          onClick={async () => {
+            setBusy(true);
+            await onConfirm();
+            setBusy(false);
+          }}
+          disabled={busy}
+          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? "Revoking…" : "Revoke code"}
+        </button>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard access denied; nothing useful to do
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
   );
 }
 
@@ -95,18 +182,20 @@ export default function AdminDashboard() {
   const [codes, setCodes] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [filter, setFilter] = useState("all"); // all | active | expired | revoked
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [pendingId, setPendingId] = useState(null);
 
-  const [singleLabel, setSingleLabel] = useState("");
-  const [singleDays, setSingleDays] = useState(30);
-  const [singleTemplates, setSingleTemplates] = useState([]);
-  const [singleResult, setSingleResult] = useState(null);
+  const [genLabel, setGenLabel] = useState("");
+  const [genDays, setGenDays] = useState(30);
+  const [genMultiple, setGenMultiple] = useState(false);
+  const [genCount, setGenCount] = useState(10);
+  const [genTemplates, setGenTemplates] = useState([]);
+  const [genResult, setGenResult] = useState(null); // { type: "single", code } | { type: "bulk", codes }
 
-  const [bulkLabel, setBulkLabel] = useState("");
-  const [bulkDays, setBulkDays] = useState(30);
-  const [bulkCount, setBulkCount] = useState(10);
-  const [bulkTemplates, setBulkTemplates] = useState([]);
-  const [bulkResult, setBulkResult] = useState(null);
+  const [editingCode, setEditingCode] = useState(null);
+  const [revokingCode, setRevokingCode] = useState(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -120,131 +209,159 @@ export default function AdminDashboard() {
     refresh();
     api.adminListTemplates().then(({ templates }) => {
       setTemplates(templates);
-      const allGranted = templates.map((t) => ({ id: t.id, canManageRows: false }));
-      setSingleTemplates(allGranted);
-      setBulkTemplates(allGranted);
+      setGenTemplates(templates.map((t) => ({ id: t.id, canManageRows: false })));
     });
   }, [refresh]);
 
-  async function handleGenerateSingle(e) {
+  async function handleGenerate(e) {
     e.preventDefault();
-    const { code } = await api.createCode(singleLabel || null, Number(singleDays), singleTemplates);
-    setSingleResult(code.code);
-    setSingleLabel("");
+    setGenResult(null);
+    if (genMultiple) {
+      const { codes } = await api.bulkCreateCodes(genLabel || null, Number(genDays), Number(genCount), genTemplates);
+      setGenResult({ type: "bulk", codes });
+    } else {
+      const { code } = await api.createCode(genLabel || null, Number(genDays), genTemplates);
+      setGenResult({ type: "single", code: code.code });
+    }
+    setGenLabel("");
     refresh();
   }
 
-  async function handleGenerateBulk(e) {
-    e.preventDefault();
-    const { codes } = await api.bulkCreateCodes(bulkLabel || null, Number(bulkDays), Number(bulkCount), bulkTemplates);
-    setBulkResult(codes);
-    setBulkLabel("");
-    refresh();
-  }
-
-  async function handleRevoke(id) {
-    await api.revokeCode(id);
-    refresh();
+  async function handleRevoke(code) {
+    setPendingId(code.id);
+    try {
+      await api.revokeCode(code.id);
+      setRevokingCode(null);
+      refresh();
+    } finally {
+      setPendingId(null);
+    }
   }
 
   async function handleReactivate(id) {
-    await api.reactivateCode(id);
-    refresh();
+    setPendingId(id);
+    try {
+      await api.reactivateCode(id);
+      refresh();
+    } finally {
+      setPendingId(null);
+    }
   }
 
-  const filtered = codes.filter((c) => {
-    if (filter === "all") return true;
-    if (filter === "active") return c.status === "active" && !c.isExpired;
-    if (filter === "expired") return c.isExpired;
-    if (filter === "revoked") return c.status === "revoked";
-    return true;
-  });
+  const PAGE_SIZE = 30;
+  const filteredAll = codes
+    .filter((c) => {
+      if (filter === "all") return true;
+      if (filter === "active") return c.status === "active" && !c.isExpired;
+      if (filter === "expired") return c.isExpired;
+      if (filter === "revoked") return c.status === "revoked";
+      return true;
+    })
+    .filter((c) => {
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      return c.code.toLowerCase().includes(q) || (c.label || "").toLowerCase().includes(q);
+    });
+  const totalPages = Math.max(1, Math.ceil(filteredAll.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const filtered = filteredAll.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search]);
 
   return (
     <div data-role="admin" className="flex min-h-svh flex-col bg-slate-50 dark:bg-slate-950">
       <Header eyebrow="Admin" title="Access code management" userLabel={admin?.username} onLogout={logout} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card title="Generate a code">
-            <form onSubmit={handleGenerateSingle} className="space-y-3">
+        <Card title="Generate codes">
+          <form onSubmit={handleGenerate} className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Label (optional)">
-                <input className={inputCls} value={singleLabel} onChange={(e) => setSingleLabel(e.target.value)} placeholder="e.g. Ramesh" />
+                <input className={inputCls} value={genLabel} onChange={(e) => setGenLabel(e.target.value)} placeholder="e.g. Ramesh" />
               </Field>
               <Field label="Valid for (days)">
-                <input type="number" min="1" className={inputCls} value={singleDays} onChange={(e) => setSingleDays(e.target.value)} />
+                <input type="number" min="1" className={inputCls} value={genDays} onChange={(e) => setGenDays(e.target.value)} />
               </Field>
-              <TemplateCheckboxes templates={templates} selected={singleTemplates} onChange={setSingleTemplates} />
-              <button
-                type="submit"
-                disabled={singleTemplates.length === 0}
-                className="w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: "var(--role-accent)" }}
-              >
-                Generate code
-              </button>
-              {singleResult && (
-                <div className="rounded-lg bg-slate-50 px-3 py-2 text-center font-mono text-sm font-semibold tracking-wider text-slate-900 dark:bg-slate-800 dark:text-white">
-                  {singleResult}
-                </div>
-              )}
-            </form>
-          </Card>
+            </div>
 
-          <Card title="Bulk generate">
-            <form onSubmit={handleGenerateBulk} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="How many">
-                  <input type="number" min="1" max="500" className={inputCls} value={bulkCount} onChange={(e) => setBulkCount(e.target.value)} />
-                </Field>
-                <Field label="Valid for (days)">
-                  <input type="number" min="1" className={inputCls} value={bulkDays} onChange={(e) => setBulkDays(e.target.value)} />
-                </Field>
-              </div>
-              <Field label="Batch label (optional)">
-                <input className={inputCls} value={bulkLabel} onChange={(e) => setBulkLabel(e.target.value)} placeholder="e.g. Sept batch" />
-              </Field>
-              <TemplateCheckboxes templates={templates} selected={bulkTemplates} onChange={setBulkTemplates} />
-              <button
-                type="submit"
-                disabled={bulkTemplates.length === 0}
-                className="w-full rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: "var(--role-accent)" }}
-              >
-                Generate codes
-              </button>
-              {bulkResult && (
-                <textarea
-                  readOnly
-                  rows={4}
-                  className="figure w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  value={bulkResult.join("\n")}
-                  onFocus={(e) => e.target.select()}
+            <label className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-200">
+              <input type="checkbox" checked={genMultiple} onChange={(e) => setGenMultiple(e.target.checked)} />
+              Generate multiple codes
+            </label>
+            {genMultiple && (
+              <Field label="How many">
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  className={`${inputCls} sm:w-40`}
+                  value={genCount}
+                  onChange={(e) => setGenCount(e.target.value)}
                 />
-              )}
-            </form>
-          </Card>
-        </div>
+              </Field>
+            )}
+
+            <TemplateCheckboxes templates={templates} selected={genTemplates} onChange={setGenTemplates} />
+
+            <button
+              type="submit"
+              disabled={genTemplates.length === 0}
+              className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ backgroundColor: "var(--role-accent)" }}
+            >
+              {genMultiple ? `Generate ${genCount || ""} codes` : "Generate code"}
+            </button>
+
+            {genResult && (
+              <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                {genResult.type === "single" ? (
+                  <div className="figure flex-1 text-center text-sm font-semibold tracking-wider text-slate-900 dark:text-white">
+                    {genResult.code}
+                  </div>
+                ) : (
+                  <textarea
+                    readOnly
+                    rows={4}
+                    className="figure flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    value={genResult.codes.join("\n")}
+                    onFocus={(e) => e.target.select()}
+                  />
+                )}
+                <CopyButton text={genResult.type === "single" ? genResult.code : genResult.codes.join("\n")} />
+              </div>
+            )}
+          </form>
+        </Card>
 
         <Card title="All codes">
-          <div className="mb-3 flex gap-2">
-            {["all", "active", "expired", "revoked"].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
-                  filter === f
-                    ? "text-white"
-                    : "border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                }`}
-                style={filter === f ? { backgroundColor: "var(--role-accent)" } : undefined}
-              >
-                {f}
-              </button>
-            ))}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="flex gap-2">
+              {["all", "active", "expired", "revoked"].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
+                    filter === f
+                      ? "text-white"
+                      : "border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                  }`}
+                  style={filter === f ? { backgroundColor: "var(--role-accent)" } : undefined}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <input
+              className={`${inputCls} ml-auto max-w-xs`}
+              placeholder="Search by code or label…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
-          {loading ? (
+          {loading && codes.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
           ) : (
             <div className="overflow-x-auto">
@@ -270,40 +387,92 @@ export default function AdminDashboard() {
                       <td className="px-2 py-2">
                         <StatusBadge status={c.status} isExpired={c.isExpired} />
                       </td>
-                      <td className="relative px-2 py-2">
-                        <CodeTemplatesCell code={c} allTemplates={templates} onSaved={refresh} />
+                      <td className="max-w-xs truncate px-2 py-2 text-xs text-slate-600 dark:text-slate-300" title={templatesSummary(c, templates)}>
+                        {templatesSummary(c, templates)}
                       </td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.durationDays}</td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.expiresAt ? c.expiresAt.slice(0, 10) : "not activated"}</td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.lastUsedAt ? c.lastUsedAt.slice(0, 16).replace("T", " ") : "–"}</td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.hasActiveSession ? "logged in" : "–"}</td>
                       <td className="px-2 py-2 text-right">
-                        {c.status === "active" ? (
-                          <button onClick={() => handleRevoke(c.id)} className="text-xs font-medium text-red-700 hover:underline dark:text-red-400">
-                            Revoke
+                        <div className="flex justify-end gap-3">
+                          <button
+                            onClick={() => setEditingCode(c)}
+                            disabled={pendingId === c.id}
+                            className="text-xs font-medium text-slate-600 hover:underline disabled:opacity-40 dark:text-slate-300"
+                          >
+                            Edit
                           </button>
-                        ) : (
-                          <button onClick={() => handleReactivate(c.id)} className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400">
-                            Reactivate
-                          </button>
-                        )}
+                          {c.status === "active" ? (
+                            <button
+                              onClick={() => setRevokingCode(c)}
+                              disabled={pendingId === c.id}
+                              className="text-xs font-medium text-red-700 hover:underline disabled:opacity-40 dark:text-red-400"
+                            >
+                              Revoke
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleReactivate(c.id)}
+                              disabled={pendingId === c.id}
+                              className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-40 dark:text-emerald-400"
+                            >
+                              {pendingId === c.id ? "Reactivating…" : "Reactivate"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {filtered.length === 0 && (
                     <tr>
                       <td colSpan={9} className="py-8 text-center text-sm text-slate-400">
-                        No codes in this filter.
+                        No codes match this filter.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+
+              {filteredAll.length > PAGE_SIZE && (
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <span>
+                    Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredAll.length)} of{" "}
+                    {filteredAll.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="rounded-md border border-slate-300 px-2 py-1 font-medium disabled:opacity-40 dark:border-slate-600"
+                    >
+                      Prev
+                    </button>
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="rounded-md border border-slate-300 px-2 py-1 font-medium disabled:opacity-40 dark:border-slate-600"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Card>
       </main>
       <Footer />
+
+      {editingCode && (
+        <EditCodeModal code={editingCode} allTemplates={templates} onClose={() => setEditingCode(null)} onSaved={refresh} />
+      )}
+      {revokingCode && (
+        <RevokeConfirmModal code={revokingCode} onClose={() => setRevokingCode(null)} onConfirm={() => handleRevoke(revokingCode)} />
+      )}
     </div>
   );
 }

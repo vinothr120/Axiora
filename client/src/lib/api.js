@@ -40,6 +40,6 @@ export const api = {
     request("/admin/codes/bulk", { method: "POST", body: JSON.stringify({ label, durationDays, count, templates }) }),
   revokeCode: (id) => request(`/admin/codes/${id}/revoke`, { method: "POST" }),
   reactivateCode: (id) => request(`/admin/codes/${id}/reactivate`, { method: "POST" }),
-  setCodeTemplates: (id, templates) =>
-    request(`/admin/codes/${id}/templates`, { method: "POST", body: JSON.stringify({ templates }) }),
+  editCode: (id, { label, durationDays, expiresAt, templates }) =>
+    request(`/admin/codes/${id}/edit`, { method: "POST", body: JSON.stringify({ label, durationDays, expiresAt, templates }) }),
 };

@@ -169,14 +169,38 @@ router.post("/codes/:id/reactivate", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/codes/:id/templates", async (req, res) => {
+router.post("/codes/:id/edit", async (req, res) => {
   const id = Number(req.params.id);
+  const row = await db.get("SELECT * FROM access_codes WHERE id = ?", [id]);
+  if (!row) return res.status(404).json({ error: "not_found" });
+
+  const label = req.body?.label ? String(req.body.label).slice(0, 128) : null;
+  const durationDays = Number(req.body?.durationDays);
+  if (!Number.isInteger(durationDays) || durationDays <= 0) {
+    return res.status(400).json({ error: "duration_days_required" });
+  }
   const resolved = resolveTemplates(req.body?.templates);
   if (!resolved.ok) return res.status(400).json({ error: "at_least_one_template_required" });
 
+  // expiresAt only takes effect once the code has already been activated — before
+  // that, expires_at is computed from duration_days at first use (see routes/auth.js).
+  if (row.activated_at && req.body?.expiresAt) {
+    const expiresAt = db.toSqlDateTime(new Date(`${req.body.expiresAt}T23:59:59.000Z`));
+    await db.run("UPDATE access_codes SET label = ?, duration_days = ?, expires_at = ? WHERE id = ?", [
+      label,
+      durationDays,
+      expiresAt,
+      id,
+    ]);
+  } else {
+    await db.run("UPDATE access_codes SET label = ?, duration_days = ? WHERE id = ?", [label, durationDays, id]);
+  }
+
   await db.run("DELETE FROM code_templates WHERE code_id = ?", [id]);
   await grantTemplates(id, resolved.templates);
-  res.json({ ok: true, templates: resolved.templates });
+
+  const updated = await db.get("SELECT * FROM access_codes WHERE id = ?", [id]);
+  res.json({ code: await withComputedStatus(updated) });
 });
 
 module.exports = router;
