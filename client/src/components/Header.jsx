@@ -1,8 +1,23 @@
 import { useState } from "react";
 import { useTheme } from "../core/ThemeContext";
 
-function maskCode(code) {
-  return code.replace(/[^-]/g, "•");
+// Masks all but the last few characters, so a glance (or a screen-share) doesn't
+// expose the whole access code — dashes are kept for readability.
+function maskCode(code, revealChars = 4) {
+  let remaining = revealChars;
+  return code
+    .split("")
+    .reverse()
+    .map((ch) => {
+      if (ch === "-") return ch;
+      if (remaining > 0) {
+        remaining--;
+        return ch;
+      }
+      return "•";
+    })
+    .reverse()
+    .join("");
 }
 
 function AccessCodeBadge({ code }) {
