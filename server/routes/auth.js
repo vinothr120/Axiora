@@ -77,7 +77,7 @@ router.post("/logout", requireClientSession, async (req, res) => {
 
 router.get("/me", requireClientSession, (req, res) => {
   const { code } = req.clientSession;
-  res.json({ label: code.label, expiresAt: code.expires_at });
+  res.json({ code: code.code, label: code.label, expiresAt: code.expires_at });
 });
 
 module.exports = router;

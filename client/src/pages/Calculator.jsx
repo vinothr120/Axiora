@@ -186,6 +186,7 @@ export default function Calculator() {
       <Header
         eyebrow="Client"
         title={info?.label || "Trading calculator"}
+        accessCode={info?.code}
         userLabel={formatAccessLabel(info?.expiresAt)}
         onLogout={logout}
         loading={status === "recalculating"}

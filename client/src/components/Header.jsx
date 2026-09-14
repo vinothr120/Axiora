@@ -1,4 +1,23 @@
+import { useState } from "react";
 import { useTheme } from "../core/ThemeContext";
+
+function maskCode(code) {
+  return code.replace(/[^-]/g, "•");
+}
+
+function AccessCodeBadge({ code }) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setRevealed((r) => !r)}
+      title={revealed ? "Click to hide access code" : "Click to reveal access code"}
+      className="figure hidden rounded px-1.5 py-0.5 text-sm text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 sm:inline"
+    >
+      {revealed ? code : maskCode(code)}
+    </button>
+  );
+}
 
 function ThemeToggle() {
   const { resolved, setPreference } = useTheme();
@@ -24,7 +43,7 @@ function ThemeToggle() {
   );
 }
 
-export default function Header({ eyebrow, title, userLabel, onLogout, loading }) {
+export default function Header({ eyebrow, title, accessCode, userLabel, onLogout, loading }) {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       {loading && <div className="progress-bar" aria-hidden="true" />}
@@ -47,6 +66,7 @@ export default function Header({ eyebrow, title, userLabel, onLogout, loading })
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {accessCode && <AccessCodeBadge code={accessCode} />}
           {userLabel && <span className="hidden text-sm text-slate-500 dark:text-slate-400 sm:inline">{userLabel}</span>}
           <ThemeToggle />
           {onLogout && (
