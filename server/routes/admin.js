@@ -181,6 +181,15 @@ router.post("/codes/:id/reactivate", async (req, res) => {
   res.json({ ok: true });
 });
 
+router.delete("/codes/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const row = await db.get("SELECT id FROM access_codes WHERE id = ?", [id]);
+  if (!row) return res.status(404).json({ error: "not_found" });
+  // Child rows (sessions, code_templates, code_overrides) cascade on delete — see db/index.js DDL.
+  await db.run("DELETE FROM access_codes WHERE id = ?", [id]);
+  res.json({ ok: true });
+});
+
 router.post("/codes/:id/edit", async (req, res) => {
   const id = Number(req.params.id);
   const row = await db.get("SELECT * FROM access_codes WHERE id = ?", [id]);

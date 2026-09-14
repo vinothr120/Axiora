@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import { useAdminAuth } from "../core/AdminAuthContext";
 import Header from "../components/Header";
@@ -58,6 +59,46 @@ function templatesSummary(code, allTemplates) {
   const anyRowEdit = code.templates.some((t) => t.canManageRows);
   if (isAll && !anyRowEdit) return "All";
   return code.templates.map((t) => `${nameFor(allTemplates, t.id)}${t.canManageRows ? " (rows)" : ""}`).join(", ");
+}
+
+function statusLabel(code) {
+  if (code.status === "revoked") return "Revoked";
+  if (code.isExpired) return "Expired";
+  if (!code.activatedAt) return "Not activated";
+  return "Active";
+}
+
+function fmtDateTime(value) {
+  return value ? value.slice(0, 16).replace("T", " ") : "";
+}
+
+const FILTERS = ["all", "active", "not-activated", "expired", "revoked"];
+const FILTER_LABELS = {
+  all: "All",
+  active: "Active",
+  "not-activated": "Not activated",
+  expired: "Expired",
+  revoked: "Revoked",
+};
+
+function exportCodesToExcel(rows, allTemplates) {
+  const data = rows.map((c) => ({
+    Code: c.code,
+    Label: c.label || "",
+    Status: statusLabel(c),
+    "Days Valid": c.durationDays,
+    "Created At": fmtDateTime(c.createdAt),
+    "Activated At": fmtDateTime(c.activatedAt),
+    "Expires At": c.expiresAt ? c.expiresAt.slice(0, 10) : "",
+    "Last Used At": fmtDateTime(c.lastUsedAt),
+    "Has Active Session": c.hasActiveSession ? "Yes" : "No",
+    Templates: templatesSummary(c, allTemplates),
+  }));
+  const sheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "Access codes");
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `access-codes-${stamp}.xlsx`);
 }
 
 function EditCodeModal({ code, allTemplates, onClose, onSaved }) {
@@ -155,6 +196,35 @@ function RevokeConfirmModal({ code, onClose, onConfirm }) {
   );
 }
 
+function DeleteConfirmModal({ code, onClose, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal title="Delete access code?" onClose={onClose}>
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+        <span className="figure font-semibold text-slate-900 dark:text-white">{code.code}</span>
+        {code.label ? ` (${code.label})` : ""} will be permanently deleted, along with its session and history. This cannot be undone —
+        if you just want to stop it from working, use Revoke instead.
+      </p>
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600">
+          Cancel
+        </button>
+        <button
+          onClick={async () => {
+            setBusy(true);
+            await onConfirm();
+            setBusy(false);
+          }}
+          disabled={busy}
+          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? "Deleting…" : "Delete permanently"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function CopyableCode({ text }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -222,8 +292,12 @@ export default function AdminDashboard() {
   const { admin, logout } = useAdminAuth();
   const [codes, setCodes] = useState([]);
   const [templates, setTemplates] = useState([]);
-  const [filter, setFilter] = useState("all"); // all | active | expired | revoked
+  const [filter, setFilter] = useState("all"); // all | active | not-activated | expired | revoked
   const [search, setSearch] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [expiresFrom, setExpiresFrom] = useState("");
+  const [expiresTo, setExpiresTo] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState(null);
@@ -237,6 +311,7 @@ export default function AdminDashboard() {
 
   const [editingCode, setEditingCode] = useState(null);
   const [revokingCode, setRevokingCode] = useState(null);
+  const [deletingCode, setDeletingCode] = useState(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -289,11 +364,23 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleDelete(code) {
+    setPendingId(code.id);
+    try {
+      await api.deleteCode(code.id);
+      setDeletingCode(null);
+      refresh();
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   const PAGE_SIZE = 30;
   const filteredAll = codes
     .filter((c) => {
       if (filter === "all") return true;
-      if (filter === "active") return c.status === "active" && !c.isExpired;
+      if (filter === "not-activated") return c.status === "active" && !c.activatedAt;
+      if (filter === "active") return c.status === "active" && Boolean(c.activatedAt) && !c.isExpired;
       if (filter === "expired") return c.isExpired;
       if (filter === "revoked") return c.status === "revoked";
       return true;
@@ -301,15 +388,36 @@ export default function AdminDashboard() {
     .filter((c) => {
       const q = search.trim().toLowerCase();
       if (!q) return true;
-      return c.code.toLowerCase().includes(q) || (c.label || "").toLowerCase().includes(q);
+      return (
+        c.code.toLowerCase().includes(q) ||
+        (c.label || "").toLowerCase().includes(q) ||
+        templatesSummary(c, templates).toLowerCase().includes(q)
+      );
+    })
+    .filter((c) => {
+      const createdDate = c.createdAt ? c.createdAt.slice(0, 10) : null;
+      if (createdFrom && (!createdDate || createdDate < createdFrom)) return false;
+      if (createdTo && (!createdDate || createdDate > createdTo)) return false;
+      const expiresDate = c.expiresAt ? c.expiresAt.slice(0, 10) : null;
+      if (expiresFrom && (!expiresDate || expiresDate < expiresFrom)) return false;
+      if (expiresTo && (!expiresDate || expiresDate > expiresTo)) return false;
+      return true;
     });
   const totalPages = Math.max(1, Math.ceil(filteredAll.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const filtered = filteredAll.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const hasDateFilter = Boolean(createdFrom || createdTo || expiresFrom || expiresTo);
 
   useEffect(() => {
     setPage(1);
-  }, [filter, search]);
+  }, [filter, search, createdFrom, createdTo, expiresFrom, expiresTo]);
+
+  function clearDateFilters() {
+    setCreatedFrom("");
+    setCreatedTo("");
+    setExpiresFrom("");
+    setExpiresTo("");
+  }
 
   return (
     <div data-role="admin" className="flex min-h-svh flex-col bg-slate-50 dark:bg-slate-950">
@@ -378,28 +486,64 @@ export default function AdminDashboard() {
 
         <Card title="All codes">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <div className="flex gap-2">
-              {["all", "active", "expired", "revoked"].map((f) => (
+            <div className="flex flex-wrap gap-2">
+              {FILTERS.map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${
                     filter === f
                       ? "text-white"
                       : "border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
                   }`}
                   style={filter === f ? { backgroundColor: "var(--role-accent)" } : undefined}
                 >
-                  {f}
+                  {FILTER_LABELS[f]}
                 </button>
               ))}
             </div>
             <input
               className={`${inputCls} ml-auto max-w-xs`}
-              placeholder="Search by code or label…"
+              placeholder="Search by code, label or template…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Created from</label>
+              <input type="date" className={`${inputCls} w-36`} value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Created to</label>
+              <input type="date" className={`${inputCls} w-36`} value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Expires from</label>
+              <input type="date" className={`${inputCls} w-36`} value={expiresFrom} onChange={(e) => setExpiresFrom(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Expires to</label>
+              <input type="date" className={`${inputCls} w-36`} value={expiresTo} onChange={(e) => setExpiresTo(e.target.value)} />
+            </div>
+            {hasDateFilter && (
+              <button
+                type="button"
+                onClick={clearDateFilters}
+                className="text-xs text-slate-500 underline hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Clear dates
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => exportCodesToExcel(filteredAll, templates)}
+              disabled={filteredAll.length === 0}
+              className="ml-auto rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Export to Excel ({filteredAll.length})
+            </button>
           </div>
 
           {loading && codes.length === 0 ? (
@@ -463,6 +607,13 @@ export default function AdminDashboard() {
                               {pendingId === c.id ? "Reactivating…" : "Reactivate"}
                             </button>
                           )}
+                          <button
+                            onClick={() => setDeletingCode(c)}
+                            disabled={pendingId === c.id}
+                            className="text-xs font-medium text-slate-500 hover:text-red-700 hover:underline disabled:opacity-40 dark:text-slate-400 dark:hover:text-red-400"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -515,6 +666,9 @@ export default function AdminDashboard() {
       )}
       {revokingCode && (
         <RevokeConfirmModal code={revokingCode} onClose={() => setRevokingCode(null)} onConfirm={() => handleRevoke(revokingCode)} />
+      )}
+      {deletingCode && (
+        <DeleteConfirmModal code={deletingCode} onClose={() => setDeletingCode(null)} onConfirm={() => handleDelete(deletingCode)} />
       )}
     </div>
   );
