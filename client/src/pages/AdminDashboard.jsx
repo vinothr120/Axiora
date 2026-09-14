@@ -288,6 +288,68 @@ function CopyButton({ text }) {
   );
 }
 
+function IconButton({ title, onClick, disabled, className = "", children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className={`rounded-md p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const iconSvgProps = {
+  viewBox: "0 0 24 24",
+  className: "h-4 w-4",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: "2",
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+};
+
+function EditIcon() {
+  return (
+    <svg {...iconSvgProps}>
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+
+function RevokeIcon() {
+  return (
+    <svg {...iconSvgProps}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+    </svg>
+  );
+}
+
+function ReactivateIcon() {
+  return (
+    <svg {...iconSvgProps}>
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <svg {...iconSvgProps}>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
 export default function AdminDashboard() {
   const { admin, logout } = useAdminAuth();
   const [codes, setCodes] = useState([]);
@@ -582,38 +644,37 @@ export default function AdminDashboard() {
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.lastUsedAt ? c.lastUsedAt.slice(0, 16).replace("T", " ") : "–"}</td>
                       <td className="px-2 py-2 text-slate-600 dark:text-slate-300">{c.hasActiveSession ? "logged in" : "–"}</td>
                       <td className="px-2 py-2 text-right">
-                        <div className="flex justify-end gap-3">
-                          <button
-                            onClick={() => setEditingCode(c)}
-                            disabled={pendingId === c.id}
-                            className="text-xs font-medium text-slate-600 hover:underline disabled:opacity-40 dark:text-slate-300"
-                          >
-                            Edit
-                          </button>
+                        <div className="flex justify-end gap-1">
+                          <IconButton title="Edit code" onClick={() => setEditingCode(c)} disabled={pendingId === c.id}>
+                            <EditIcon />
+                          </IconButton>
                           {c.status === "active" ? (
-                            <button
+                            <IconButton
+                              title="Revoke code — stops it working immediately"
                               onClick={() => setRevokingCode(c)}
                               disabled={pendingId === c.id}
-                              className="text-xs font-medium text-red-700 hover:underline disabled:opacity-40 dark:text-red-400"
+                              className="hover:text-red-700 dark:hover:text-red-400"
                             >
-                              Revoke
-                            </button>
+                              <RevokeIcon />
+                            </IconButton>
                           ) : (
-                            <button
+                            <IconButton
+                              title={pendingId === c.id ? "Reactivating…" : "Reactivate code"}
                               onClick={() => handleReactivate(c.id)}
                               disabled={pendingId === c.id}
-                              className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-40 dark:text-emerald-400"
+                              className="hover:text-emerald-700 dark:hover:text-emerald-400"
                             >
-                              {pendingId === c.id ? "Reactivating…" : "Reactivate"}
-                            </button>
+                              <ReactivateIcon />
+                            </IconButton>
                           )}
-                          <button
+                          <IconButton
+                            title="Delete code permanently — cannot be undone"
                             onClick={() => setDeletingCode(c)}
                             disabled={pendingId === c.id}
-                            className="text-xs font-medium text-slate-500 hover:text-red-700 hover:underline disabled:opacity-40 dark:text-slate-400 dark:hover:text-red-400"
+                            className="hover:text-red-700 dark:hover:text-red-400"
                           >
-                            Delete
-                          </button>
+                            <DeleteIcon />
+                          </IconButton>
                         </div>
                       </td>
                     </tr>
