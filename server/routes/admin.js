@@ -3,10 +3,19 @@ const bcrypt = require("bcryptjs");
 const db = require("../db");
 const { sessionToken, accessCode } = require("../lib/tokens");
 const { requireAdminSession, COOKIE_NAME, IDLE_MINUTES } = require("../middleware/adminAuth");
+const { createLoginLimiter } = require("../middleware/rateLimit");
+const { logLoginAttempt } = require("../lib/auditLog");
 const { listTemplates } = require("../templates");
 
 const router = express.Router();
 router.use(express.json());
+const loginLimiter = createLoginLimiter();
+
+// Compared against when no admin matches the given username, so a nonexistent
+// username takes the same bcrypt.compare time as a wrong password — otherwise
+// the early-exit on a missing admin is a timing side-channel that lets an
+// attacker enumerate valid usernames by response latency.
+const DUMMY_HASH = bcrypt.hashSync("axiora-timing-safe-dummy", 12);
 
 const cookieOpts = {
   httpOnly: true,
@@ -15,13 +24,15 @@ const cookieOpts = {
   maxAge: IDLE_MINUTES * 60 * 1000,
 };
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const username = String(req.body?.username || "").trim();
   const password = String(req.body?.password || "");
   if (!username || !password) return res.status(400).json({ error: "credentials_required" });
 
   const admin = await db.get("SELECT * FROM admins WHERE username = ?", [username]);
-  if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
+  const validPassword = await bcrypt.compare(password, admin ? admin.password_hash : DUMMY_HASH);
+  if (!admin || !validPassword) {
+    logLoginAttempt({ type: "admin", identifier: username, ip: req.ip, result: "fail:invalid_credentials" });
     return res.status(401).json({ error: "invalid_credentials" });
   }
 
@@ -31,6 +42,7 @@ router.post("/login", async (req, res) => {
     "INSERT INTO admin_sessions (token, admin_id, created_at, last_activity_at) VALUES (?, ?, ?, ?)",
     [token, admin.id, nowSql, nowSql]
   );
+  logLoginAttempt({ type: "admin", identifier: username, ip: req.ip, result: "success" });
   res.cookie(COOKIE_NAME, token, cookieOpts);
   res.json({ ok: true, username: admin.username });
 });

@@ -2,8 +2,11 @@ const express = require("express");
 const db = require("../db");
 const { sessionToken } = require("../lib/tokens");
 const { requireClientSession, COOKIE_NAME, IDLE_MINUTES } = require("../middleware/clientAuth");
+const { createLoginLimiter } = require("../middleware/rateLimit");
+const { logLoginAttempt, maskCode } = require("../lib/auditLog");
 
 const router = express.Router();
+const loginLimiter = createLoginLimiter();
 
 const cookieOpts = {
   httpOnly: true,
@@ -12,13 +15,19 @@ const cookieOpts = {
   maxAge: IDLE_MINUTES * 60 * 1000,
 };
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const raw = String(req.body?.code || "").trim().toUpperCase();
   if (!raw) return res.status(400).json({ error: "code_required" });
 
   const code = await db.get("SELECT * FROM access_codes WHERE code = ?", [raw]);
-  if (!code) return res.status(401).json({ error: "invalid_code" });
-  if (code.status !== "active") return res.status(401).json({ error: "code_revoked" });
+  if (!code) {
+    logLoginAttempt({ type: "client", identifier: maskCode(raw), ip: req.ip, result: "fail:invalid_code" });
+    return res.status(401).json({ error: "invalid_code" });
+  }
+  if (code.status !== "active") {
+    logLoginAttempt({ type: "client", identifier: maskCode(raw), ip: req.ip, result: "fail:code_revoked" });
+    return res.status(401).json({ error: "code_revoked" });
+  }
 
   const now = new Date();
   const nowSql = db.toSqlDateTime(now);
@@ -32,6 +41,7 @@ router.post("/login", async (req, res) => {
     ]);
     code.expires_at = expiresAt;
   } else if (code.expires_at && nowSql > code.expires_at) {
+    logLoginAttempt({ type: "client", identifier: maskCode(raw), ip: req.ip, result: "fail:code_expired" });
     return res.status(401).json({ error: "code_expired" });
   }
 
@@ -49,6 +59,7 @@ router.post("/login", async (req, res) => {
     code.id,
   ]);
 
+  logLoginAttempt({ type: "client", identifier: maskCode(raw), ip: req.ip, result: "success" });
   res.cookie(COOKIE_NAME, token, cookieOpts);
   res.json({ ok: true, expiresAt: code.expires_at });
 });

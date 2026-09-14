@@ -2,6 +2,7 @@ require("dotenv").config();
 const path = require("path");
 const express = require("express");
 const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
 const bcrypt = require("bcryptjs");
 const db = require("./db");
 
@@ -57,6 +58,30 @@ async function main() {
 
   const app = express();
   app.disable("x-powered-by");
+  // cPanel's "Setup Node.js App" runs this behind Phusion Passenger as a reverse
+  // proxy — trust its X-Forwarded-* headers so req.ip (used by the login rate
+  // limiters) reflects the real client IP instead of the proxy's.
+  app.set("trust proxy", 1);
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          imgSrc: ["'self'", "data:"],
+          connectSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+        },
+      },
+      // Google Fonts responses don't carry Cross-Origin-Resource-Policy headers —
+      // COEP's default "require-corp" would otherwise block them from loading.
+      crossOriginEmbedderPolicy: false,
+    })
+  );
   app.use(cookieParser());
   app.use(express.json());
 
