@@ -58,11 +58,11 @@ function ThemeToggle() {
   );
 }
 
-export default function Header({ eyebrow, title, accessCode, userLabel, onLogout, loading }) {
+export default function Header({ eyebrow, title, accessCode, userLabel, onLogout, loading, wide }) {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       {loading && <div className="progress-bar" aria-hidden="true" />}
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+      <div className={`flex items-center justify-between gap-3 px-4 py-3 ${wide ? "sm:px-6" : "mx-auto max-w-6xl"}`}>
         <div className="flex items-center gap-3">
           <img src="/brand/virasaka-icon-square.svg" alt="" className="h-8 w-8 rounded-lg" />
           <div className="leading-tight">

@@ -5,9 +5,19 @@ const FIELD_LABELS = { open: "OPEN", high: "HIGH", low: "LOW", close: "CLOSE" };
 const TARGET_COLOR_VARS = ["var(--ladder-tgt1)", "var(--ladder-tgt2)"];
 const FAR_TARGET_COLOR = "var(--ladder-tgt-far)";
 
-function fmt(n) {
+// What "Show decimal point" off does to a value: "round" (38744.75 -> 38745) or
+// "truncate" (38744.75 -> 38744). Rounding for now — switch here if the client prefers
+// the decimals simply chopped off.
+const DECIMALS_OFF_MODE = "round";
+
+// `format` is the client's display toggles ({ commas, decimals }, both off by default).
+// Display only — the server always calculates on the full values.
+function fmt(n, { commas = false, decimals = false } = {}) {
   if (n === null || n === undefined || Number.isNaN(n)) return "–";
-  return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  let value = Number(n);
+  // "+ 0" turns a -0 (e.g. -0.4 rounded) into 0 so it doesn't print as "-0".
+  if (!decimals) value = (DECIMALS_OFF_MODE === "truncate" ? Math.trunc(value) : Math.round(value)) + 0;
+  return value.toLocaleString(undefined, { useGrouping: commas, maximumFractionDigits: 2 });
 }
 
 function Th({ children, className = "", style }) {
@@ -52,7 +62,8 @@ function SymbolCell({ children, onDelete }) {
   );
 }
 
-export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statColumns, inputFields }) {
+export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statColumns, inputFields, format }) {
+  const num = (n) => fmt(n, format);
   const cols = statColumns && statColumns.length > 0 ? statColumns : [{ key: "avg", label: "AVG" }];
   const fields = inputFields && inputFields.length > 0 ? inputFields : ["open", "high", "low", "close"];
 
@@ -94,7 +105,7 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statC
                 ))}
                 {cols.map((col) => (
                   <Td key={col.key} style={col.key === "todayOpen" ? { color: "var(--ladder-open)" } : undefined}>
-                    {fmt(col.key === "todayOpen" ? row.todayOpen : row.block1[col.key])}
+                    {num(col.key === "todayOpen" ? row.todayOpen : row.block1[col.key])}
                   </Td>
                 ))}
               </tr>
@@ -106,7 +117,8 @@ export function InputsAndStatsTable({ rows, inputs, onChange, onDeleteRow, statC
   );
 }
 
-export function TradeLevelsTable({ rows }) {
+export function TradeLevelsTable({ rows, format }) {
+  const num = (n) => fmt(n, format);
   const maxTargets = Math.max(...rows.map((r) => r.block2.targetsUp.length));
   const targetCols = Array.from({ length: maxTargets }, (_, i) => i);
   const ordinal = ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH"];
@@ -139,21 +151,21 @@ export function TradeLevelsTable({ rows }) {
             <tr key={row.key} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
               <SymbolCell>{row.label}</SymbolCell>
               <Td className="font-semibold" style={{ color: "var(--ladder-open)" }}>
-                {fmt(row.block2.buyAbove)}
+                {num(row.block2.buyAbove)}
               </Td>
               {targetCols.map((i) => (
                 <Td key={`u${i}`} style={{ color: targetColor(i) }}>
-                  {fmt(row.block2.targetsUp[i])}
+                  {num(row.block2.targetsUp[i])}
                 </Td>
               ))}
-              <Td style={{ color: "var(--ladder-sl)" }}>{fmt(row.block2.stopLoss)}</Td>
-              <Td className="font-semibold">{fmt(row.block2.sellBelow)}</Td>
+              <Td style={{ color: "var(--ladder-sl)" }}>{num(row.block2.stopLoss)}</Td>
+              <Td className="font-semibold">{num(row.block2.sellBelow)}</Td>
               {targetCols.map((i) => (
                 <Td key={`d${i}`} style={i >= 2 ? { color: FAR_TARGET_COLOR } : undefined}>
-                  {fmt(row.block2.targetsDown[i])}
+                  {num(row.block2.targetsDown[i])}
                 </Td>
               ))}
-              <Td style={{ color: "var(--ladder-sl)" }}>{fmt(row.block2.stopLossSell)}</Td>
+              <Td style={{ color: "var(--ladder-sl)" }}>{num(row.block2.stopLossSell)}</Td>
             </tr>
           ))}
         </tbody>
@@ -166,7 +178,8 @@ export function TradeLevelsTable({ rows }) {
 // symbol per row. The 100% ratio (the actual high/low, not an extrapolated level) is
 // bolded to mark it as the key level — the source sheet singles it out with its own
 // color too, inconsistently across the other 19 rows, so a clean bold beats copying that.
-export function FibonacciLadderTable({ rows }) {
+export function FibonacciLadderTable({ rows, format }) {
+  const num = (n) => fmt(n, format);
   const levels = rows[0]?.fibLevels || [];
 
   return (
@@ -193,12 +206,12 @@ export function FibonacciLadderTable({ rows }) {
               <SymbolCell>{row.label}</SymbolCell>
               {row.fibLevels.map((lvl) => (
                 <Td key={`${lvl.ratio}-b`} className={lvl.ratio === 1 ? "font-semibold" : undefined} style={{ color: "var(--ladder-open)" }}>
-                  {fmt(lvl.buy)}
+                  {num(lvl.buy)}
                 </Td>
               ))}
               {row.fibLevels.map((lvl) => (
                 <Td key={`${lvl.ratio}-s`} className={lvl.ratio === 1 ? "font-semibold" : undefined} style={{ color: "var(--ladder-sl)" }}>
-                  {fmt(lvl.sell)}
+                  {num(lvl.sell)}
                 </Td>
               ))}
             </tr>
@@ -220,7 +233,8 @@ const MPT_LEVEL_COLORS = [
   { high: "var(--mpt-magenta)", low: "var(--mpt-magenta)" },
 ];
 
-export function MptLevelsTable({ rows }) {
+export function MptLevelsTable({ rows, format }) {
+  const num = (n) => fmt(n, format);
   const levels = rows[0]?.levels || [];
 
   return (
@@ -247,16 +261,16 @@ export function MptLevelsTable({ rows }) {
             <tr key={row.key} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
               <SymbolCell>{row.label}</SymbolCell>
               <Td className="font-semibold" style={{ color: "var(--mpt-anchor)" }}>
-                {fmt(row.mpt)}
+                {num(row.mpt)}
               </Td>
               {row.levels.map((lvl, i) => (
                 <Td key={`${lvl.label}-h`} style={{ color: MPT_LEVEL_COLORS[i]?.high }}>
-                  {fmt(lvl.high)}
+                  {num(lvl.high)}
                 </Td>
               ))}
               {row.levels.map((lvl, i) => (
                 <Td key={`${lvl.label}-l`} style={{ color: MPT_LEVEL_COLORS[i]?.low }}>
-                  {fmt(lvl.low)}
+                  {num(lvl.low)}
                 </Td>
               ))}
             </tr>

@@ -36,6 +36,11 @@ function formatAccessLabel(expiresAt) {
   return `Access until ${date} (${suffix})`;
 }
 
+const FORMAT_OPTIONS = [
+  { key: "commas", label: "Show commas" },
+  { key: "decimals", label: "Show decimal point" },
+];
+
 export default function Calculator() {
   const { info, logout } = useClientAuth();
   const navigate = useNavigate();
@@ -52,6 +57,8 @@ export default function Calculator() {
   const [customMeta, setCustomMeta] = useState({});
   const [hiddenKeys, setHiddenKeys] = useState(new Set());
   const [status, setStatus] = useState("loading"); // loading | ready | recalculating | error
+  // Display toggles — deliberately not persisted: both start off on every login.
+  const [format, setFormat] = useState({ commas: false, decimals: false });
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -190,34 +197,51 @@ export default function Calculator() {
         userLabel={formatAccessLabel(info?.expiresAt)}
         onLogout={logout}
         loading={status === "recalculating"}
+        wide
       />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {templates.length > 1 && (
-          <div className="mb-4 flex gap-2 overflow-x-auto">
-            {templates.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveId(t.id)}
-                className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-                  activeId === t.id
-                    ? "text-white"
-                    : "border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                }`}
-                style={activeId === t.id ? { backgroundColor: "var(--role-accent)" } : undefined}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-        )}
+      <main className="w-full flex-1 px-4 py-6 sm:px-6">
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {templates.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveId(t.id)}
+                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                    activeId === t.id
+                      ? "text-white"
+                      : "border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  }`}
+                  style={activeId === t.id ? { backgroundColor: "var(--role-accent)" } : undefined}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {rows && (
+            <div className="ml-auto flex items-center gap-4">
+              {FORMAT_OPTIONS.map((opt) => (
+                <label key={opt.key} className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={format[opt.key]}
+                    onChange={(e) => setFormat((prev) => ({ ...prev, [opt.key]: e.target.checked }))}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
 
         {!rows && status === "loading" && <p className="py-12 text-center text-sm text-slate-400">Loading…</p>}
         {status === "error" && <p className="py-12 text-center text-sm text-red-600">Something went wrong loading the calculator. Refresh to try again.</p>}
 
         {rows && (
           <div className="space-y-6">
-            <section>
+            <section className="mx-auto max-w-6xl">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="font-heading text-sm font-semibold text-slate-700 dark:text-slate-200">
                   Inputs &amp; stats
@@ -237,6 +261,7 @@ export default function Calculator() {
                 onDeleteRow={canManageRows ? handleDeleteRow : undefined}
                 statColumns={statColumns}
                 inputFields={inputFields}
+                format={format}
               />
               {canManageRows && groups.length > 0 && <AddRowForm groups={groups} inputFields={inputFields} onAdd={handleAddRow} />}
             </section>
@@ -245,9 +270,9 @@ export default function Calculator() {
               <h2 className="mb-2 font-heading text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Trade levels
               </h2>
-              {layout === "fibonacci" && <FibonacciLadderTable rows={rows} />}
-              {layout === "mpt" && <MptLevelsTable rows={rows} />}
-              {layout === "ladder" && <TradeLevelsTable rows={rows} />}
+              {layout === "fibonacci" && <FibonacciLadderTable rows={rows} format={format} />}
+              {layout === "mpt" && <MptLevelsTable rows={rows} format={format} />}
+              {layout === "ladder" && <TradeLevelsTable rows={rows} format={format} />}
             </section>
           </div>
         )}
