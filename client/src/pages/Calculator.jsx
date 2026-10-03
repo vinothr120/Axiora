@@ -198,44 +198,48 @@ export default function Calculator() {
         onLogout={logout}
         loading={status === "recalculating"}
         wide
-      />
+      >
+        {/* Rendered inside the sticky header so template tabs and display toggles stay
+            in view while the tables scroll. */}
+        {(templates.length > 1 || rows) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {templates.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveId(t.id)}
+                    className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                      activeId === t.id
+                        ? "text-white"
+                        : "border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    }`}
+                    style={activeId === t.id ? { backgroundColor: "var(--role-accent)" } : undefined}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {rows && (
+              <div className="ml-auto flex items-center gap-4">
+                {FORMAT_OPTIONS.map((opt) => (
+                  <label key={opt.key} className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={format[opt.key]}
+                      onChange={(e) => setFormat((prev) => ({ ...prev, [opt.key]: e.target.checked }))}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Header>
 
       <main className="w-full flex-1 px-4 py-6 sm:px-6">
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          {templates.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto">
-              {templates.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveId(t.id)}
-                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-                    activeId === t.id
-                      ? "text-white"
-                      : "border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  }`}
-                  style={activeId === t.id ? { backgroundColor: "var(--role-accent)" } : undefined}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {rows && (
-            <div className="ml-auto flex items-center gap-4">
-              {FORMAT_OPTIONS.map((opt) => (
-                <label key={opt.key} className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={format[opt.key]}
-                    onChange={(e) => setFormat((prev) => ({ ...prev, [opt.key]: e.target.checked }))}
-                  />
-                  {opt.label}
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-
         {!rows && status === "loading" && <p className="py-12 text-center text-sm text-slate-400">Loading…</p>}
         {status === "error" && <p className="py-12 text-center text-sm text-red-600">Something went wrong loading the calculator. Refresh to try again.</p>}
 

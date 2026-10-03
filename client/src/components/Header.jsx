@@ -58,7 +58,7 @@ function ThemeToggle() {
   );
 }
 
-export default function Header({ eyebrow, title, accessCode, userLabel, onLogout, loading, wide }) {
+export default function Header({ eyebrow, title, accessCode, userLabel, onLogout, loading, wide, children }) {
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
       {loading && <div className="progress-bar" aria-hidden="true" />}
@@ -95,6 +95,7 @@ export default function Header({ eyebrow, title, accessCode, userLabel, onLogout
           )}
         </div>
       </div>
+      {children && <div className={`px-4 pb-3 ${wide ? "sm:px-6" : "mx-auto max-w-6xl"}`}>{children}</div>}
     </header>
   );
 }
