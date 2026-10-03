@@ -44,7 +44,7 @@ function calculate(input = {}) {
 module.exports = {
   id: "2020-xl",
   name: "2020 XL",
-  layout: "fibonacci",
+  layout: "fibonacci-transposed",
   inputFields: ["high", "low"],
   symbols: SYMBOLS,
   groups: GROUPS,

@@ -64,7 +64,7 @@ function calculate(input = {}) {
 module.exports = {
   id: "90xl-new-2026",
   name: "90XL New 2026",
-  layout: "fibonacci",
+  layout: "fibonacci-transposed",
   inputFields: ["high", "low"],
   symbols: SYMBOLS,
   groups: GROUPS,

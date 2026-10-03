@@ -61,7 +61,9 @@ function calculate(input = {}) {
 module.exports = {
   id: "90xl-view-5",
   name: "90 XL View 5",
-  layout: "fibonacci",
+  // Same Fibonacci ladder as the other "fibonacci" templates, shown with symbols as
+  // columns and levels as rows.
+  layout: "fibonacci-transposed",
   inputFields: ["high", "low"],
   symbols: SYMBOLS,
   groups: GROUPS,

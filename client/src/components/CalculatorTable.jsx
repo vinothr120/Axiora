@@ -5,6 +5,9 @@ const FIELD_LABELS = { open: "OPEN", high: "HIGH", low: "LOW", close: "CLOSE" };
 const TARGET_COLOR_VARS = ["var(--ladder-tgt1)", "var(--ladder-tgt2)"];
 const FAR_TARGET_COLOR = "var(--ladder-tgt-far)";
 
+// Widest a column is allowed to get when a table is stretched to fill spare page width.
+const MAX_STRETCH_COLUMN_PX = 160;
+
 // What "Show decimal point" off does to a value: "round" (38744.75 -> 38745) or
 // "truncate" (38744.75 -> 38744). Rounding for now — switch here if the client prefers
 // the decimals simply chopped off.
@@ -178,9 +181,58 @@ export function TradeLevelsTable({ rows, format }) {
 // symbol per row. The 100% ratio (the actual high/low, not an extrapolated level) is
 // bolded to mark it as the key level — the source sheet singles it out with its own
 // color too, inconsistently across the other 19 rows, so a clean bold beats copying that.
-export function FibonacciLadderTable({ rows, format }) {
+//
+// `transposed` flips that: one symbol per column, one BUY/SELL level per row (all the
+// buys, then all the sells — the same order the columns run in the normal view).
+export function FibonacciLadderTable({ rows, format, transposed = false }) {
   const num = (n) => fmt(n, format);
   const levels = rows[0]?.fibLevels || [];
+
+  if (transposed) {
+    const sides = [
+      { key: "buy", label: "Buy", color: "var(--ladder-open)" },
+      { key: "sell", label: "Sell", color: "var(--ladder-sl)" },
+    ];
+    // Stretch only as far as the columns can use: each column may grow to
+    // MAX_STRETCH_COLUMN_PX, so many symbols fill the page while one or two stay compact.
+    const stretchWidth = `min(100%, ${(rows.length + 1) * MAX_STRETCH_COLUMN_PX}px)`;
+    return (
+      <div
+        style={{ minWidth: stretchWidth }}
+        className="mx-auto w-fit max-w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800"
+      >
+        <table className="min-w-full border-collapse bg-white dark:bg-slate-900">
+          <thead>
+            <tr>
+              <Th className="sticky left-0 z-[1] bg-slate-50 text-left dark:bg-slate-800">Level</Th>
+              {rows.map((row) => (
+                <Th key={row.key}>{row.label}</Th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sides.map((side) =>
+              levels.map((lvl, i) => (
+                <tr key={`${lvl.ratio}-${side.key}`} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/40">
+                  <td
+                    style={{ color: side.color }}
+                    className="sticky left-0 z-[1] whitespace-nowrap border-r border-slate-200 bg-white px-3 py-2 text-left font-mono text-[11px] font-medium uppercase tracking-wide dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    {side.label} {lvl.label}%
+                  </td>
+                  {rows.map((row) => (
+                    <Td key={row.key} className={lvl.ratio === 1 ? "font-semibold" : undefined} style={{ color: side.color }}>
+                      {num(row.fibLevels[i]?.[side.key])}
+                    </Td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">

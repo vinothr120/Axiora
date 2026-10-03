@@ -271,6 +271,7 @@ export default function Calculator() {
                 Trade levels
               </h2>
               {layout === "fibonacci" && <FibonacciLadderTable rows={rows} format={format} />}
+              {layout === "fibonacci-transposed" && <FibonacciLadderTable rows={rows} format={format} transposed />}
               {layout === "mpt" && <MptLevelsTable rows={rows} format={format} />}
               {layout === "ladder" && <TradeLevelsTable rows={rows} format={format} />}
             </section>
