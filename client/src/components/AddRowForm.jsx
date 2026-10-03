@@ -6,8 +6,12 @@ export default function AddRowForm({ groups, inputFields, onAdd }) {
   const fields = inputFields && inputFields.length > 0 ? inputFields : ["open", "high", "low", "close"];
   const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState("");
-  const [group, setGroup] = useState(groups[0]?.key);
+  const [selectedGroup, setGroup] = useState(groups[0]?.key);
   const [values, setValues] = useState(() => Object.fromEntries(fields.map((f) => [f, ""])));
+  // This form stays mounted across template switches, so the remembered group can
+  // belong to the previous template — fall back to this template's first group, or the
+  // server rejects the row and the add silently does nothing.
+  const group = groups.some((g) => g.key === selectedGroup) ? selectedGroup : groups[0]?.key;
 
   function reset() {
     setName("");
@@ -17,7 +21,7 @@ export default function AddRowForm({ groups, inputFields, onAdd }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const entries = fields.map((f) => [f, Number(values[f])]);
+    const entries = fields.map((f) => [f, Number(values[f] ?? "")]);
     if (!name.trim() || entries.some(([, n]) => !Number.isFinite(n))) return;
     onAdd({
       key: `custom-${crypto.randomUUID()}`,
@@ -77,7 +81,7 @@ export default function AddRowForm({ groups, inputFields, onAdd }) {
           <input
             type="number"
             inputMode="decimal"
-            value={values[f]}
+            value={values[f] ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, [f]: e.target.value }))}
             className="figure w-20 rounded-md border border-slate-300 px-2 py-1.5 text-right text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
